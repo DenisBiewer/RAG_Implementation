@@ -1,0 +1,6 @@
+.idea/misc.xml
+/.idea
+/app/__pycache__
+/tests/__pycache__
+data/processed/hotpot_corpus.jsonl
+data/processed/hotpot_queries.jsonl
