@@ -1,0 +1,40 @@
+# Core ML / RAG stack
+
+transformers>=4.41.2
+# Hugging Face library for loading and running the LLM (Qwen-7B-Instruct).
+# Used for tokenization, model loading, and controlled text generation.
+
+torch>=2.2.2
+# PyTorch backend required by Transformers.
+# Provides tensor operations and GPU/CPU inference support.
+
+faiss-cpu>=1.8.0
+# Facebook AI Similarity Search library for vector retrieval.
+# Used to implement dense nearest-neighbor search over embeddings.
+
+# Data processing / embeddings
+
+numpy>=1.26.4
+# Numerical computing library used for vector operations and embedding handling.
+
+sentencepiece>=0.2.0
+# Tokenization library required by many Hugging Face models (including Qwen/Contriever).
+# Handles subword tokenization efficiently.
+
+# Infrastructure / experiment control
+
+pydantic>=2.6.4
+# Data validation and structured configuration.
+# Used for defining experiment configs (e.g., retrieval settings, defense toggles).
+
+orjson>=3.10.7
+# High-performance JSON library.
+# Used for fast JSONL logging of experiment runs (critical for evaluation pipeline).
+
+tqdm>=4.66.4
+# Progress bar utility.
+# Used for tracking experiment runs (queries × configs × repetitions).
+
+datasets==2.19.1
+# dataset library by Huuging Face
+# Used to retrieve the hotpot_qa and fullwiki datasets
