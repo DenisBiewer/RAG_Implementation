@@ -4,3 +4,4 @@
 /tests/__pycache__
 data/processed/hotpot_corpus.jsonl
 data/processed/hotpot_queries.jsonl
+/scripts/__pycache__
