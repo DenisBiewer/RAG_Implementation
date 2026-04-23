@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import importlib.util
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+from app.model_profiles import GeneratorProfile
+
+
+class QwenGenerator:
+    """
+    Wrapper around Qwen for deterministic baseline generation.
+
+    Practical defaults for this project:
+    - prefer CUDA when available
+    - use fp16 on CUDA for non-quantized models
+    - use fp32 on CPU for non-quantized models
+    - allow 4-bit / 8-bit quantized loading for larger experimental models
+    """
+
+    def __init__(
+        self,
+        model_name: str = "Qwen/Qwen2.5-1.5B-Instruct",
+        device: str = "auto",
+        quantization: str = "none",
+    ):
+        self.model_name = model_name
+        self.device = self._resolve_device(device)
+        self.quantization = quantization
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+
+        model_kwargs = self._build_model_kwargs()
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+
+        if self.quantization == "none":
+            self.model.to(self.device)
+
+        self.model.eval()
+
+    @classmethod
+    def from_profile(cls, profile: GeneratorProfile) -> QwenGenerator:
+        return cls(
+            model_name=profile.model_name,
+            device=profile.device,
+            quantization=profile.quantization,
+        )
+
+    def _resolve_device(self, device: str) -> str:
+        if device == "auto":
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        return device
+
+    def _build_model_kwargs(self) -> dict:
+        if self.quantization == "none":
+            dtype = torch.float16 if self.device.startswith("cuda") else torch.float32
+            return {"dtype": dtype}
+
+        if importlib.util.find_spec("bitsandbytes") is None:
+            raise ImportError(
+                "Quantized loading requires the 'bitsandbytes' package. "
+                "Install it or switch the generator profile to quantization='none'."
+            )
+
+        if self.quantization == "4bit":
+            quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        elif self.quantization == "8bit":
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        else:
+            raise ValueError(
+                f"Unsupported quantization mode: {self.quantization!r}. "
+                "Expected 'none', '4bit', or '8bit'."
+            )
+
+        # `device_map="auto"` lets Accelerate place the quantized model correctly.
+        return {
+            "dtype": "auto",
+            "device_map": "auto",
+            "quantization_config": quantization_config,
+        }
+
+    @torch.no_grad()
+    def generate(
+        self,
+        messages: list[dict[str, str]],
+        max_new_tokens: int = 256,
+    ) -> str:
+        """
+        Generate a deterministic answer from the provided chat messages.
+        """
+        inputs = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(self.device)
+
+        output_ids = self.model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=self.tokenizer.eos_token_id,
+        )
+
+        generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
+        text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+
+        return text.strip()
