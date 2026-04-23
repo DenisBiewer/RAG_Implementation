@@ -1,10 +1,19 @@
 from app.io_utils import read_jsonl
 
+from pathlib import Path
+
 """ This script loads and prints corpus records for manual verification """
 
+BASE_DIR = Path(__file__).resolve().parent
+PROCESSED_DIR = BASE_DIR.parent / "data" / "processed"
+
+CORPUS_PATH = PROCESSED_DIR / "hotpot_corpus.jsonl"
+QUERIES_PATH = PROCESSED_DIR / "hotpot_queries.jsonl"
+
+
 def main():
-    corpus = read_jsonl("../data/processed/hotpot_corpus.jsonl")
-    queries = read_jsonl("../data/processed/hotpot_queries.jsonl")
+    corpus = read_jsonl(str(CORPUS_PATH))
+    queries = read_jsonl(str(QUERIES_PATH))
 
     print(f"Loaded corpus records: {len(corpus)}")
     print(f"Loaded query records: {len(queries)}")

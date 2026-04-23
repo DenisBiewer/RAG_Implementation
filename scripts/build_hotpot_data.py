@@ -3,12 +3,21 @@ from __future__ import annotations
 from collections import OrderedDict
 from datasets import load_dataset
 
+from pathlib import Path
+
 from app.schemas import Document, QueryRecord
 from app.io_utils import write_jsonl
 
+""" 
+This script is responsible for loading the HotpotQA and fulltext datasets and 
+storing them in JSONl in the expected data structure.
+"""
 
-CORPUS_OUTPUT_PATH = "../data/processed/hotpot_corpus.jsonl"
-QUERIES_OUTPUT_PATH = "../data/processed/hotpot_queries.jsonl"
+BASE_DIR = Path(__file__).resolve().parent
+PROCESSED_DIR = BASE_DIR.parent / "data" / "processed"
+
+CORPUS_OUTPUT_PATH = PROCESSED_DIR / "hotpot_corpus.jsonl"
+QUERIES_OUTPUT_PATH = PROCESSED_DIR / "hotpot_queries.jsonl"
 
 
 def build_corpus(dataset) -> list[Document]:
@@ -90,11 +99,11 @@ def main():
     print(f"Corpus size: {len(corpus)}")
     print(f"Query count: {len(queries)}")
 
-    write_jsonl(CORPUS_OUTPUT_PATH, (doc.model_dump() for doc in corpus))
-    write_jsonl(QUERIES_OUTPUT_PATH, (q.model_dump() for q in queries))
+    write_jsonl(str(CORPUS_OUTPUT_PATH), (doc.model_dump() for doc in corpus))
+    write_jsonl(str(QUERIES_OUTPUT_PATH), (q.model_dump() for q in queries))
 
-    print(f"Saved corpus to: {CORPUS_OUTPUT_PATH}")
-    print(f"Saved queries to: {QUERIES_OUTPUT_PATH}")
+    print(f"Saved corpus to: {str(CORPUS_OUTPUT_PATH)}")
+    print(f"Saved queries to: {str(QUERIES_OUTPUT_PATH)}")
 
 
 if __name__ == "__main__":
