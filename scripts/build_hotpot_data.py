@@ -16,8 +16,9 @@ storing them in JSONl in the expected data structure.
 BASE_DIR = Path(__file__).resolve().parent
 PROCESSED_DIR = BASE_DIR.parent / "data" / "processed"
 
-CORPUS_OUTPUT_PATH = PROCESSED_DIR / "hotpot_corpus.jsonl"
-QUERIES_OUTPUT_PATH = PROCESSED_DIR / "hotpot_queries.jsonl"
+COMPLETE_OUTPUT_DIR = PROCESSED_DIR / "clean" / "complete"
+CORPUS_OUTPUT_PATH = COMPLETE_OUTPUT_DIR / "corpus.jsonl"
+QUERIES_OUTPUT_PATH = COMPLETE_OUTPUT_DIR / "queries.jsonl"
 
 
 def build_corpus(dataset) -> list[Document]:
