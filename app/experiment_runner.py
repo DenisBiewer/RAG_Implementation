@@ -46,10 +46,10 @@ PROJECT_DIR = BASE_DIR.parent
 DATA_DIR = PROJECT_DIR / "data"
 LOG_DIR = PROJECT_DIR / "logs"
 
-DEFAULT_QUERIES_PATH = DATA_DIR / "processed" / "hotpot_queries_dev.jsonl"
-DEFAULT_INDEX_PATH = DATA_DIR / "built" / "faiss_dev.index"
-DEFAULT_META_PATH = DATA_DIR / "built" / "faiss_dev_meta.json"
-DEFAULT_OUTPUT_PATH = LOG_DIR / "experiment_runs.jsonl"
+DEFAULT_QUERIES_PATH = DATA_DIR / "processed" / "clean" / "dev" / "queries.jsonl"
+DEFAULT_INDEX_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss.index"
+DEFAULT_META_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss_meta.json"
+DEFAULT_OUTPUT_PATH = LOG_DIR / "clean" / "dev" / "experiment_runs.jsonl"
 
 AVAILABLE_CONFIGS: dict[str, RunConfig] = {
     BASELINE_CONFIG.run_name: BASELINE_CONFIG,
@@ -163,6 +163,7 @@ def run_experiments(
     config_names: list[str],
     profile_name: str,
     limit: int | None = None,
+    output_paths_by_config: dict[str, Path] | None = None,
 ) -> None:
     """
     Execute a batch of RAG runs with one-time component initialization.
@@ -179,9 +180,14 @@ def run_experiments(
         index_path: Path to the serialized FAISS index.
         meta_path: Path to the JSON metadata aligned with the FAISS rows.
         output_path: Path to the JSONL file that will receive experiment logs.
+            Used for every config unless `output_paths_by_config` provides a
+            config-specific path.
         config_names: Names of configs to execute.
         profile_name: Name of the generator profile to use.
         limit: Optional maximum number of queries to run from the input file.
+        output_paths_by_config: Optional mapping from config name to JSONL
+            output path. This allows multiple configs to run with one model load
+            while still writing separate log files.
 
     Raises:
         ValueError: If the generator profile is unknown or no queries are
@@ -233,6 +239,14 @@ def run_experiments(
     total_runs = len(queries) * len(run_configs)
     print(f"Running {total_runs} query/config combinations...")
 
+    if output_paths_by_config:
+        print("Writing separate output files per config:")
+        for config in run_configs:
+            config_output_path = output_paths_by_config.get(config.run_name, output_path)
+            print(f"- {config.run_name}: {config_output_path}")
+    else:
+        print(f"Writing all experiment logs to {output_path}")
+
     progress = tqdm(total=total_runs, desc="Experiments", unit="run")
 
     try:
@@ -257,12 +271,19 @@ def run_experiments(
                 }
                 record["support_coverage"] = build_support_coverage(record, corpus_topic_ids)
 
-                append_jsonl(str(output_path), record)
+                config_output_path = output_path
+                if output_paths_by_config is not None:
+                    config_output_path = output_paths_by_config.get(config.run_name, output_path)
+
+                append_jsonl(str(config_output_path), record)
                 progress.update(1)
     finally:
         progress.close()
 
-    print(f"Saved experiment logs to {output_path}")
+    if output_paths_by_config:
+        print("Saved experiment logs to per-config output files.")
+    else:
+        print(f"Saved experiment logs to {output_path}")
 
 
 def parse_args() -> argparse.Namespace:
