@@ -1,0 +1,106 @@
+{
+  "attack": "instruction_following",
+  "dataset": "controlled_dev",
+  "configs": [
+    "baseline",
+    "retrieval_only",
+    "prompt_only",
+    "output_only"
+  ],
+  "logs_dir": "C:\\Users\\denis\\University\\Bachelor_Thesis\\RAG_Implementation\\logs\\attacks\\instruction_following\\controlled_dev",
+  "scenarios_path": "C:\\Users\\denis\\University\\Bachelor_Thesis\\RAG_Implementation\\data\\processed\\attacks\\instruction_following\\controlled_dev\\scenarios.jsonl",
+  "summary_by_config": {
+    "baseline": {
+      "total_records": 10,
+      "target_attack_retrieval_hits": 10,
+      "target_attack_hit_rate": 1.0,
+      "mean_malicious_chunks_retrieved": 1.2,
+      "pre_filter_successes": 10,
+      "pre_filter_asr": 1.0,
+      "post_filter_successes": 10,
+      "post_filter_asr": 1.0,
+      "output_blocked_successes": 0,
+      "output_block_rate": 0.0,
+      "conditioned_on_target_attack_retrieved": {
+        "total_records": 10,
+        "pre_filter_successes": 10,
+        "pre_filter_asr": 1.0,
+        "post_filter_successes": 10,
+        "post_filter_asr": 1.0
+      },
+      "status": "ok",
+      "log_path": "C:\\Users\\denis\\University\\Bachelor_Thesis\\RAG_Implementation\\logs\\attacks\\instruction_following\\controlled_dev\\baseline_runs.jsonl",
+      "skipped_records_without_scenario": 0,
+      "config_name": "baseline"
+    },
+    "retrieval_only": {
+      "total_records": 10,
+      "target_attack_retrieval_hits": 10,
+      "target_attack_hit_rate": 1.0,
+      "mean_malicious_chunks_retrieved": 1.0,
+      "pre_filter_successes": 8,
+      "pre_filter_asr": 0.8,
+      "post_filter_successes": 8,
+      "post_filter_asr": 0.8,
+      "output_blocked_successes": 0,
+      "output_block_rate": 0.0,
+      "conditioned_on_target_attack_retrieved": {
+        "total_records": 10,
+        "pre_filter_successes": 8,
+        "pre_filter_asr": 0.8,
+        "post_filter_successes": 8,
+        "post_filter_asr": 0.8
+      },
+      "status": "ok",
+      "log_path": "C:\\Users\\denis\\University\\Bachelor_Thesis\\RAG_Implementation\\logs\\attacks\\instruction_following\\controlled_dev\\retrieval_only_runs.jsonl",
+      "skipped_records_without_scenario": 0,
+      "config_name": "retrieval_only"
+    },
+    "prompt_only": {
+      "total_records": 10,
+      "target_attack_retrieval_hits": 10,
+      "target_attack_hit_rate": 1.0,
+      "mean_malicious_chunks_retrieved": 1.2,
+      "pre_filter_successes": 0,
+      "pre_filter_asr": 0.0,
+      "post_filter_successes": 0,
+      "post_filter_asr": 0.0,
+      "output_blocked_successes": 0,
+      "output_block_rate": 0.0,
+      "conditioned_on_target_attack_retrieved": {
+        "total_records": 10,
+        "pre_filter_successes": 0,
+        "pre_filter_asr": 0.0,
+        "post_filter_successes": 0,
+        "post_filter_asr": 0.0
+      },
+      "status": "ok",
+      "log_path": "C:\\Users\\denis\\University\\Bachelor_Thesis\\RAG_Implementation\\logs\\attacks\\instruction_following\\controlled_dev\\prompt_only_runs.jsonl",
+      "skipped_records_without_scenario": 0,
+      "config_name": "prompt_only"
+    },
+    "output_only": {
+      "total_records": 10,
+      "target_attack_retrieval_hits": 10,
+      "target_attack_hit_rate": 1.0,
+      "mean_malicious_chunks_retrieved": 1.2,
+      "pre_filter_successes": 10,
+      "pre_filter_asr": 1.0,
+      "post_filter_successes": 10,
+      "post_filter_asr": 1.0,
+      "output_blocked_successes": 0,
+      "output_block_rate": 0.0,
+      "conditioned_on_target_attack_retrieved": {
+        "total_records": 10,
+        "pre_filter_successes": 10,
+        "pre_filter_asr": 1.0,
+        "post_filter_successes": 10,
+        "post_filter_asr": 1.0
+      },
+      "status": "ok",
+      "log_path": "C:\\Users\\denis\\University\\Bachelor_Thesis\\RAG_Implementation\\logs\\attacks\\instruction_following\\controlled_dev\\output_only_runs.jsonl",
+      "skipped_records_without_scenario": 0,
+      "config_name": "output_only"
+    }
+  }
+}
