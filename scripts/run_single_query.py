@@ -16,10 +16,10 @@ from app.logging_utils import append_jsonl
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR.parent / "data"
 
-QUERIES_PATH = DATA_DIR / "processed/hotpot_queries_dev.jsonl"
-INDEX_PATH = DATA_DIR / "built/faiss_dev.index"
-META_PATH = DATA_DIR / "built/faiss_dev_meta.json"
-LOG_PATH = BASE_DIR.parent / "logs/baseline_runs.jsonl"
+QUERIES_PATH = DATA_DIR / "processed" / "clean" / "dev" / "queries.jsonl"
+INDEX_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss.index"
+META_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss_meta.json"
+LOG_PATH = BASE_DIR.parent / "logs" / "clean" / "dev" / "baseline_runs.jsonl"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

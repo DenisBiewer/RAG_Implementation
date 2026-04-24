@@ -7,11 +7,14 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 PROCESSED_DIR = BASE_DIR.parent / "data" / "processed"
 
-CORPUS_PATH = PROCESSED_DIR / "hotpot_corpus.jsonl"
-QUERIES_PATH = PROCESSED_DIR / "hotpot_queries.jsonl"
+COMPLETE_DIR = PROCESSED_DIR / "clean" / "complete"
+DEV_DIR = PROCESSED_DIR / "clean" / "dev"
 
-DEV_CORPUS_PATH = PROCESSED_DIR / "hotpot_corpus_dev.jsonl"
-DEV_QUERIES_PATH = PROCESSED_DIR / "hotpot_queries_dev.jsonl"
+CORPUS_PATH = COMPLETE_DIR / "corpus.jsonl"
+QUERIES_PATH = COMPLETE_DIR / "queries.jsonl"
+
+DEV_CORPUS_PATH = DEV_DIR / "corpus.jsonl"
+DEV_QUERIES_PATH = DEV_DIR / "queries.jsonl"
 
 
 def main():

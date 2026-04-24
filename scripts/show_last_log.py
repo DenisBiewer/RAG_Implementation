@@ -4,7 +4,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
-LOG_PATH = BASE_DIR.parent / "logs/baseline_dev_runs.jsonl"
+LOG_PATH = BASE_DIR.parent / "logs" / "clean" / "dev" / "baseline_runs.jsonl"
 
 def main():
     with open(str(LOG_PATH), "r", encoding="utf-8") as f:
@@ -20,7 +20,7 @@ def main():
     print("QUERY:", last["query"])
     print()
     print("OUTPUT:", last["model_output"])
-    print("LATENCIES:", last["latencies_ms"]
+    print("LATENCIES:", last["latencies_ms"])
 
 
 if __name__ == "__main__":

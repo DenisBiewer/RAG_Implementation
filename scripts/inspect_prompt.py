@@ -12,9 +12,9 @@ from app.prompt_builder import build_baseline_messages
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR.parent / "data"
 
-QUERIES_PATH = DATA_DIR / "processed/hotpot_queries_dev.jsonl"
-INDEX_PATH = DATA_DIR / "built/faiss_dev.index"
-META_PATH = DATA_DIR / "built/faiss_dev_meta.json"
+QUERIES_PATH = DATA_DIR / "processed" / "clean" / "dev" / "queries.jsonl"
+INDEX_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss.index"
+META_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss_meta.json"
 DEVICE = "cpu"
 
 
