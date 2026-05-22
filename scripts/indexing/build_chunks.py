@@ -16,13 +16,13 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = BASE_DIR.parent
+PROJECT_DIR = next(
+    parent
+    for parent in (BASE_DIR, *BASE_DIR.parents)
+    if (parent / "app").exists() and (parent / "data").exists()
+)
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
-
-from app.corpus_loader import load_documents
-from app.chunking import FixedChunker
-from app.io_utils import write_jsonl
 
 
 DATA_DIR = PROJECT_DIR / "data"
@@ -36,6 +36,14 @@ PRESETS = {
         "input_path": PROCESSED_DIR / "clean" / "dev" / "corpus.jsonl",
         "output_path": BUILT_DIR / "clean" / "dev" / "chunks.jsonl",
     },
+    "close_ended_dev": {
+        "input_path": PROCESSED_DIR / "clean" / "close_ended_dev" / "initial" / "corpus.jsonl",
+        "output_path": BUILT_DIR / "clean" / "close_ended_dev" / "initial" / "chunks.jsonl",
+    },
+    "close_ended_dev_final": {
+        "input_path": PROCESSED_DIR / "clean" / "close_ended_dev" / "final" / "corpus.jsonl",
+        "output_path": BUILT_DIR / "clean" / "close_ended_dev" / "final" / "chunks.jsonl",
+    },
     "clean_controlled_dev": {
         "input_path": PROCESSED_DIR / "clean" / "controlled_dev" / "corpus.jsonl",
         "output_path": BUILT_DIR / "clean" / "controlled_dev" / "chunks.jsonl",
@@ -48,6 +56,18 @@ PRESETS = {
         "input_path": PROCESSED_DIR / "attacks" / "instruction_following" / "controlled_dev" / "corpus.jsonl",
         "output_path": BUILT_DIR / "attacks" / "instruction_following" / "controlled_dev" / "chunks.jsonl",
     },
+    "exfiltration_controlled_dev": {
+        "input_path": PROCESSED_DIR / "attacks" / "exfiltration" / "controlled_dev" / "corpus.jsonl",
+        "output_path": BUILT_DIR / "attacks" / "exfiltration" / "controlled_dev" / "chunks.jsonl",
+    },
+    "exfiltration_controlled_dev_control": {
+        "input_path": PROCESSED_DIR / "attacks" / "exfiltration" / "controlled_dev_control" / "corpus.jsonl",
+        "output_path": BUILT_DIR / "attacks" / "exfiltration" / "controlled_dev_control" / "chunks.jsonl",
+    },
+    "poisoned_rag_close_ended_dev": {
+        "input_path": PROCESSED_DIR / "attacks" / "poisoned_rag" / "close_ended_dev" / "final" / "corpus.jsonl",
+        "output_path": BUILT_DIR / "attacks" / "poisoned_rag" / "close_ended_dev" / "final" / "chunks.jsonl",
+    },
 }
 
 
@@ -57,6 +77,37 @@ def resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
     input_path = args.input_path or preset["input_path"]
     output_path = args.output_path or preset["output_path"]
     return input_path, output_path
+
+
+def build_chunks(
+    *,
+    input_path: Path,
+    output_path: Path,
+    tokenizer_name: str,
+    chunk_size: int,
+    overlap: int,
+) -> None:
+    """Build token chunks from one processed corpus file."""
+    from app.chunking import FixedChunker
+    from app.corpus_loader import load_documents
+    from app.io_utils import write_jsonl
+
+    print(f"Loading documents from {input_path}...")
+    docs = load_documents(str(input_path))
+    print(f"Loaded {len(docs)} documents.")
+
+    chunker = FixedChunker(
+        tokenizer_name=tokenizer_name,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
+
+    print("Chunking documents...")
+    chunks = chunker.chunk_documents(docs)
+
+    print(f"Built {len(chunks)} chunks.")
+    write_jsonl(str(output_path), (chunk.model_dump() for chunk in chunks))
+    print(f"Saved chunks to {output_path}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -94,23 +145,13 @@ def main() -> None:
     """CLI entry point."""
     args = parse_args()
     input_path, output_path = resolve_paths(args)
-
-    print(f"Loading documents from {input_path}...")
-    docs = load_documents(str(input_path))
-    print(f"Loaded {len(docs)} documents.")
-
-    chunker = FixedChunker(
+    build_chunks(
+        input_path=input_path,
+        output_path=output_path,
         tokenizer_name=args.tokenizer_name,
         chunk_size=args.chunk_size,
         overlap=args.overlap,
     )
-
-    print("Chunking documents...")
-    chunks = chunker.chunk_documents(docs)
-
-    print(f"Built {len(chunks)} chunks.")
-    write_jsonl(str(output_path), (chunk.model_dump() for chunk in chunks))
-    print(f"Saved chunks to {output_path}")
 
 
 if __name__ == "__main__":
