@@ -19,7 +19,11 @@ from typing import Any
 
 
 BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = BASE_DIR.parent
+PROJECT_DIR = next(
+    parent
+    for parent in (BASE_DIR, *BASE_DIR.parents)
+    if (parent / "app").exists() and (parent / "data").exists()
+)
 LOG_DIR = PROJECT_DIR / "logs"
 PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
 RESULTS_DIR = PROJECT_DIR / "results"
