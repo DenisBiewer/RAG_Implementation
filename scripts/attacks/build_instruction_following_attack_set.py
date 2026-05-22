@@ -13,8 +13,7 @@ as a controlled indirect prompt-injection probe:
 - fixed sentinel success target
 
 The output corpus can be chunked and indexed with:
-    python scripts/build_chunks.py --preset instruction_following_controlled_dev
-    python "scripts/build_embeddings_&_index.py" --preset instruction_following_controlled_dev
+    python scripts/indexing/build_retrieval_artifacts.py --preset instruction_following_controlled_dev
 """
 
 import argparse
@@ -24,7 +23,11 @@ from typing import Any
 
 
 BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = BASE_DIR.parent
+PROJECT_DIR = next(
+    parent
+    for parent in (BASE_DIR, *BASE_DIR.parents)
+    if (parent / "app").exists() and (parent / "data").exists()
+)
 PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
 
 CLEAN_CONTROLLED_DEV_DIR = PROCESSED_DIR / "clean" / "controlled_dev"
