@@ -68,10 +68,10 @@ PRESETS = {
         "index_path": BUILT_DIR / "attacks" / "exfiltration" / "controlled_dev_control" / "faiss.index",
         "meta_path": BUILT_DIR / "attacks" / "exfiltration" / "controlled_dev_control" / "faiss_meta.json",
     },
-    "poisoned_rag_controlled_dev": {
-        "chunks_path": BUILT_DIR / "attacks" / "poisoned_rag" / "controlled_dev" / "chunks.jsonl",
-        "index_path": BUILT_DIR / "attacks" / "poisoned_rag" / "controlled_dev" / "faiss.index",
-        "meta_path": BUILT_DIR / "attacks" / "poisoned_rag" / "controlled_dev" / "faiss_meta.json",
+    "poisoned_rag_close_ended_dev": {
+        "chunks_path": BUILT_DIR / "attacks" / "poisoned_rag" / "close_ended_dev" / "chunks.jsonl",
+        "index_path": BUILT_DIR / "attacks" / "poisoned_rag" / "close_ended_dev" / "faiss.index",
+        "meta_path": BUILT_DIR / "attacks" / "poisoned_rag" / "close_ended_dev" / "faiss_meta.json",
     },
 }
 
