@@ -108,3 +108,38 @@ class QwenGenerator:
         text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
 
         return text.strip()
+
+    @torch.no_grad()
+    def generate_sampled(
+        self,
+        messages: list[dict[str, str]],
+        max_new_tokens: int = 256,
+        temperature: float = 1.0,
+    ) -> str:
+        """
+        Generate a sampled answer from the provided chat messages.
+
+        This is intended for stages that need output diversity, such as
+        candidate PoisonedRAG passage generation. The default deterministic
+        `generate` method remains unchanged for the rest of the project.
+        """
+        inputs = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(self.device)
+
+        output_ids = self.model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=temperature,
+            pad_token_id=self.tokenizer.eos_token_id,
+        )
+
+        generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
+        text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+
+        return text.strip()
