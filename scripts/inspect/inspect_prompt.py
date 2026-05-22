@@ -1,6 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
+
+
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = next(
+    parent
+    for parent in (BASE_DIR, *BASE_DIR.parents)
+    if (parent / "app").exists() and (parent / "data").exists()
+)
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
 from app.corpus_loader import load_queries
 from app.embedder import ContrieverEmbedder
@@ -8,9 +19,7 @@ from app.vector_index import FaissIndex
 from app.retrieval import retrieve_top_k
 from app.prompt_builder import build_baseline_messages
 
-
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR.parent / "data"
+DATA_DIR = PROJECT_DIR / "data"
 
 QUERIES_PATH = DATA_DIR / "processed" / "clean" / "dev" / "queries.jsonl"
 INDEX_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss.index"

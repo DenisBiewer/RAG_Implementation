@@ -3,8 +3,13 @@ import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = next(
+    parent
+    for parent in (BASE_DIR, *BASE_DIR.parents)
+    if (parent / "app").exists() and (parent / "data").exists()
+)
 
-LOG_PATH = BASE_DIR.parent / "logs" / "clean" / "dev" / "baseline_runs.jsonl"
+LOG_PATH = PROJECT_DIR / "logs" / "clean" / "dev" / "baseline_runs.jsonl"
 
 def main():
     with open(str(LOG_PATH), "r", encoding="utf-8") as f:
