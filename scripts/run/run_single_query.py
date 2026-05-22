@@ -1,8 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import torch
+
+
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = next(
+    parent
+    for parent in (BASE_DIR, *BASE_DIR.parents)
+    if (parent / "app").exists() and (parent / "data").exists()
+)
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
 from app.corpus_loader import load_queries
 from app.embedder import ContrieverEmbedder
@@ -12,14 +23,12 @@ from app.model_profiles import DEV_GENERATOR_PROFILE
 from app.pipeline import run_baseline_query
 from app.logging_utils import append_jsonl
 
-
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR.parent / "data"
+DATA_DIR = PROJECT_DIR / "data"
 
 QUERIES_PATH = DATA_DIR / "processed" / "clean" / "dev" / "queries.jsonl"
 INDEX_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss.index"
 META_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss_meta.json"
-LOG_PATH = BASE_DIR.parent / "logs" / "clean" / "dev" / "baseline_runs.jsonl"
+LOG_PATH = PROJECT_DIR / "logs" / "clean" / "dev" / "baseline_runs.jsonl"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
