@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from pathlib import Path
+import sys
+
 from datasets import load_dataset
 
-from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = next(
+    parent
+    for parent in (BASE_DIR, *BASE_DIR.parents)
+    if (parent / "app").exists() and (parent / "data").exists()
+)
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
 from app.schemas import Document, QueryRecord
 from app.io_utils import write_jsonl
@@ -13,8 +24,7 @@ This script is responsible for loading the HotpotQA and fulltext datasets and
 storing them in JSONl in the expected data structure.
 """
 
-BASE_DIR = Path(__file__).resolve().parent
-PROCESSED_DIR = BASE_DIR.parent / "data" / "processed"
+PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
 
 COMPLETE_OUTPUT_DIR = PROCESSED_DIR / "clean" / "complete"
 CORPUS_OUTPUT_PATH = COMPLETE_OUTPUT_DIR / "corpus.jsonl"
