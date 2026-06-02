@@ -1,8 +1,8 @@
 # Core ML / RAG stack
 
 transformers>=4.41.2
-# Hugging Face library for loading and running the LLM (Qwen-7B-Instruct).
-# Used for tokenization, model loading, and controlled text generation.
+# Hugging Face library for loading the Contriever embedder and Qwen generator
+# profiles used in the repository.
 
 torch>=2.2.2
 # PyTorch backend required by Transformers.
@@ -36,11 +36,12 @@ tqdm>=4.66.4
 # Used for tracking experiment runs (queries × configs × repetitions).
 
 datasets==2.19.1
-# dataset library by Huuging Face
-# Used to retrieve the hotpot_qa and fullwiki datasets
+# Dataset library by Hugging Face.
+# Used to retrieve the HotpotQA `fullwiki` dataset during clean-data build.
 
 bitsandbytes==0.49.2
-# 4-bit / 8-bit quantized LLM loading for CUDA experiments
+# 4-bit / 8-bit quantized LLM loading used by the main and validation
+# generator profiles on CUDA-oriented setups.
 
 accelerate>=0.33.0
 # Required by Transformers quantized loading when using device_map="auto".
