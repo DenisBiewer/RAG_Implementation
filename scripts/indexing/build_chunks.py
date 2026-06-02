@@ -15,68 +15,25 @@ import sys
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = next(
-    parent
-    for parent in (BASE_DIR, *BASE_DIR.parents)
-    if (parent / "app").exists() and (parent / "data").exists()
-)
+PROJECT_DIR = Path(__file__).resolve().parents[2]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-
-DATA_DIR = PROJECT_DIR / "data"
-PROCESSED_DIR = DATA_DIR / "processed"
-BUILT_DIR = DATA_DIR / "built"
-
-TOKENIZER_NAME = "Qwen/Qwen2.5-7B-Instruct"
-
-PRESETS = {
-    "clean_dev": {
-        "input_path": PROCESSED_DIR / "clean" / "dev" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "clean" / "dev" / "chunks.jsonl",
-    },
-    "close_ended_dev": {
-        "input_path": PROCESSED_DIR / "clean" / "close_ended_dev" / "initial" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "clean" / "close_ended_dev" / "initial" / "chunks.jsonl",
-    },
-    "close_ended_dev_final": {
-        "input_path": PROCESSED_DIR / "clean" / "close_ended_dev" / "final" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "clean" / "close_ended_dev" / "final" / "chunks.jsonl",
-    },
-    "clean_controlled_dev": {
-        "input_path": PROCESSED_DIR / "clean" / "controlled_dev" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "clean" / "controlled_dev" / "chunks.jsonl",
-    },
-    "clean_complete": {
-        "input_path": PROCESSED_DIR / "clean" / "complete" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "clean" / "complete" / "chunks.jsonl",
-    },
-    "instruction_following_controlled_dev": {
-        "input_path": PROCESSED_DIR / "attacks" / "instruction_following" / "controlled_dev" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "attacks" / "instruction_following" / "controlled_dev" / "chunks.jsonl",
-    },
-    "exfiltration_controlled_dev": {
-        "input_path": PROCESSED_DIR / "attacks" / "exfiltration" / "controlled_dev" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "attacks" / "exfiltration" / "controlled_dev" / "chunks.jsonl",
-    },
-    "exfiltration_controlled_dev_control": {
-        "input_path": PROCESSED_DIR / "attacks" / "exfiltration" / "controlled_dev_control" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "attacks" / "exfiltration" / "controlled_dev_control" / "chunks.jsonl",
-    },
-    "poisoned_rag_close_ended_dev": {
-        "input_path": PROCESSED_DIR / "attacks" / "poisoned_rag" / "close_ended_dev" / "final" / "corpus.jsonl",
-        "output_path": BUILT_DIR / "attacks" / "poisoned_rag" / "close_ended_dev" / "final" / "chunks.jsonl",
-    },
-}
+from scripts.indexing.indexing_presets import (
+    INDEXING_PRESETS,
+    TOKENIZER_NAME,
+    is_attack_preset,
+    resolve_chunk_paths as resolve_preset_chunk_paths,
+)
 
 
 def resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
     """Resolve input/output paths from a preset plus optional overrides."""
-    preset = PRESETS[args.preset]
-    input_path = args.input_path or preset["input_path"]
-    output_path = args.output_path or preset["output_path"]
-    return input_path, output_path
+    return resolve_preset_chunk_paths(
+        args.preset,
+        input_path=args.input_path,
+        chunks_path=args.output_path,
+    )
 
 
 def build_chunks(
@@ -112,12 +69,20 @@ def build_chunks(
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI options."""
-    parser = argparse.ArgumentParser(description="Build token chunks from a processed corpus.")
+    parser = argparse.ArgumentParser(
+        description="Build token chunks from a processed corpus.",
+        epilog=(
+            "Warning: `--tokenizer-name`, `--chunk-size`, `--overlap`, and the "
+            "effective input corpus/order are retrieval-artifact compatibility "
+            "settings. Reuse the same values when building attack artifacts from "
+            "an existing clean retrieval base."
+        ),
+    )
     parser.add_argument(
         "--preset",
-        choices=sorted(PRESETS),
-        default="clean_controlled_dev",
-        help="Path preset to use. Defaults to the clean controlled development corpus.",
+        choices=sorted(INDEXING_PRESETS),
+        default="clean_complete",
+        help="Path preset to use. Defaults to the canonical complete clean corpus.",
     )
     parser.add_argument(
         "--input-path",
@@ -144,6 +109,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """CLI entry point."""
     args = parse_args()
+    if is_attack_preset(args.preset):
+        raise ValueError(
+            "Attack presets must be built through "
+            "`scripts/indexing/build_retrieval_artifacts.py` so the attacked "
+            "chunks remain an append-only derivative of the clean retrieval base."
+        )
     input_path, output_path = resolve_paths(args)
     build_chunks(
         input_path=input_path,
