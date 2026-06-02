@@ -15,13 +15,26 @@ import json
 from pathlib import Path
 from typing import Any
 
-from poisoned_rag_common import (
-    DEFAULT_FINAL_TARGET_ANSWER_MANIFEST_PATH,
-    DEFAULT_FINAL_TARGET_ANSWER_QUERIES_PATH,
-    DEFAULT_TARGET_ANSWER_REVIEW_PATH,
-    iter_jsonl,
-    write_jsonl,
-)
+try:
+    from .poisoned_rag_common import (
+        DEFAULT_DATASET,
+        DEFAULT_FINAL_TARGET_ANSWER_MANIFEST_PATH,
+        DEFAULT_FINAL_TARGET_ANSWER_QUERIES_PATH,
+        DEFAULT_TARGET_ANSWER_REVIEW_PATH,
+        iter_jsonl,
+        resolve_poisoned_rag_paths,
+        write_jsonl,
+    )
+except ImportError:
+    from poisoned_rag_common import (
+        DEFAULT_DATASET,
+        DEFAULT_FINAL_TARGET_ANSWER_MANIFEST_PATH,
+        DEFAULT_FINAL_TARGET_ANSWER_QUERIES_PATH,
+        DEFAULT_TARGET_ANSWER_REVIEW_PATH,
+        iter_jsonl,
+        resolve_poisoned_rag_paths,
+        write_jsonl,
+    )
 
 from scripts.analysis.answer_validation import normalize_text
 
@@ -156,19 +169,21 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Finalize reviewed PoisonedRAG target answers."
     )
-    parser.add_argument("--manual-review-path", type=Path, default=DEFAULT_TARGET_ANSWER_REVIEW_PATH)
-    parser.add_argument("--final-queries-path", type=Path, default=DEFAULT_FINAL_TARGET_ANSWER_QUERIES_PATH)
-    parser.add_argument("--final-manifest-path", type=Path, default=DEFAULT_FINAL_TARGET_ANSWER_MANIFEST_PATH)
+    parser.add_argument("--dataset", default=DEFAULT_DATASET)
+    parser.add_argument("--manual-review-path", type=Path, default=None)
+    parser.add_argument("--final-queries-path", type=Path, default=None)
+    parser.add_argument("--final-manifest-path", type=Path, default=None)
     return parser.parse_args()
 
 
 def main() -> None:
     """CLI entry point."""
     args = parse_args()
+    paths = resolve_poisoned_rag_paths(args.dataset)
     finalize_target_answers(
-        manual_review_path=args.manual_review_path,
-        final_queries_path=args.final_queries_path,
-        final_manifest_path=args.final_manifest_path,
+        manual_review_path=args.manual_review_path or paths["target_answer_review_path"],
+        final_queries_path=args.final_queries_path or paths["final_target_answer_queries_path"],
+        final_manifest_path=args.final_manifest_path or paths["final_target_answer_manifest_path"],
     )
 
 

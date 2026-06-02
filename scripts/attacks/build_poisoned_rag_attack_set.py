@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Build a PoisonedRAG attack corpus for the close-ended-dev final set.
+Build a PoisonedRAG attack corpus for a finalized close-ended dataset.
 
 This builder is intentionally strict and reproducible:
 - it reads the clean final corpus without mutating it
@@ -15,18 +15,36 @@ import json
 from pathlib import Path
 from typing import Any
 
-from poisoned_rag_common import (
-    ATTACK_TYPE,
-    DEFAULT_ATTACK_CORPUS_PATH,
-    DEFAULT_ATTACK_MANIFEST_PATH,
-    DEFAULT_ATTACK_POISON_DOCS_PATH,
-    DEFAULT_ATTACK_QUERIES_PATH,
-    DEFAULT_ATTACK_SCENARIOS_PATH,
-    DEFAULT_FINAL_CORPUS_PATH,
-    DEFAULT_GENERATED_PASSAGES_PATH,
-    iter_jsonl,
-    write_jsonl,
-)
+try:
+    from .poisoned_rag_common import (
+        ATTACK_TYPE,
+        DEFAULT_DATASET,
+        DEFAULT_ATTACK_CORPUS_PATH,
+        DEFAULT_ATTACK_MANIFEST_PATH,
+        DEFAULT_ATTACK_POISON_DOCS_PATH,
+        DEFAULT_ATTACK_QUERIES_PATH,
+        DEFAULT_ATTACK_SCENARIOS_PATH,
+        DEFAULT_FINAL_CORPUS_PATH,
+        DEFAULT_GENERATED_PASSAGES_PATH,
+        iter_jsonl,
+        resolve_poisoned_rag_paths,
+        write_jsonl,
+    )
+except ImportError:
+    from poisoned_rag_common import (
+        ATTACK_TYPE,
+        DEFAULT_DATASET,
+        DEFAULT_ATTACK_CORPUS_PATH,
+        DEFAULT_ATTACK_MANIFEST_PATH,
+        DEFAULT_ATTACK_POISON_DOCS_PATH,
+        DEFAULT_ATTACK_QUERIES_PATH,
+        DEFAULT_ATTACK_SCENARIOS_PATH,
+        DEFAULT_FINAL_CORPUS_PATH,
+        DEFAULT_GENERATED_PASSAGES_PATH,
+        iter_jsonl,
+        resolve_poisoned_rag_paths,
+        write_jsonl,
+    )
 
 
 PASSAGE_SEPARATOR = "\n\n"
@@ -112,6 +130,7 @@ def build_scenario(
 
 def build_attack_set(
     *,
+    dataset: str,
     base_corpus_path: Path,
     queries_path: Path,
     passages_path: Path,
@@ -199,6 +218,7 @@ def build_attack_set(
     write_jsonl(scenarios_path, scenarios)
 
     manifest = {
+        "dataset": dataset,
         "attack_type": ATTACK_TYPE,
         "base_corpus_path": str(base_corpus_path),
         "queries_path": str(queries_path),
@@ -239,27 +259,30 @@ def build_attack_set(
 def parse_args() -> argparse.Namespace:
     """Parse CLI options."""
     parser = argparse.ArgumentParser(description="Build a PoisonedRAG attack corpus from validated passages.")
-    parser.add_argument("--base-corpus-path", type=Path, default=DEFAULT_FINAL_CORPUS_PATH)
-    parser.add_argument("--queries-path", type=Path, default=DEFAULT_ATTACK_QUERIES_PATH)
-    parser.add_argument("--passages-path", type=Path, default=DEFAULT_GENERATED_PASSAGES_PATH)
-    parser.add_argument("--output-corpus-path", type=Path, default=DEFAULT_ATTACK_CORPUS_PATH)
-    parser.add_argument("--poison-docs-path", type=Path, default=DEFAULT_ATTACK_POISON_DOCS_PATH)
-    parser.add_argument("--scenarios-path", type=Path, default=DEFAULT_ATTACK_SCENARIOS_PATH)
-    parser.add_argument("--manifest-path", type=Path, default=DEFAULT_ATTACK_MANIFEST_PATH)
+    parser.add_argument("--dataset", default=DEFAULT_DATASET)
+    parser.add_argument("--base-corpus-path", type=Path, default=None)
+    parser.add_argument("--queries-path", type=Path, default=None)
+    parser.add_argument("--passages-path", type=Path, default=None)
+    parser.add_argument("--output-corpus-path", type=Path, default=None)
+    parser.add_argument("--poison-docs-path", type=Path, default=None)
+    parser.add_argument("--scenarios-path", type=Path, default=None)
+    parser.add_argument("--manifest-path", type=Path, default=None)
     return parser.parse_args()
 
 
 def main() -> None:
     """CLI entry point."""
     args = parse_args()
+    paths = resolve_poisoned_rag_paths(args.dataset)
     build_attack_set(
-        base_corpus_path=args.base_corpus_path,
-        queries_path=args.queries_path,
-        passages_path=args.passages_path,
-        output_corpus_path=args.output_corpus_path,
-        poison_docs_path=args.poison_docs_path,
-        scenarios_path=args.scenarios_path,
-        manifest_path=args.manifest_path,
+        dataset=args.dataset,
+        base_corpus_path=args.base_corpus_path or paths["final_corpus_path"],
+        queries_path=args.queries_path or paths["attack_queries_path"],
+        passages_path=args.passages_path or paths["generated_passages_path"],
+        output_corpus_path=args.output_corpus_path or paths["attack_corpus_path"],
+        poison_docs_path=args.poison_docs_path or paths["attack_poison_docs_path"],
+        scenarios_path=args.scenarios_path or paths["attack_scenarios_path"],
+        manifest_path=args.manifest_path or paths["attack_manifest_path"],
     )
 
 

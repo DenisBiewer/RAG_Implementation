@@ -1,67 +1,67 @@
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
-
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = next(
-    parent
-    for parent in (BASE_DIR, *BASE_DIR.parents)
-    if (parent / "app").exists() and (parent / "data").exists()
-)
+PROJECT_DIR = Path(__file__).resolve().parents[2]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
+from app.dataset_registry import (
+    DEFAULT_CLOSE_ENDED_MAIN_DATASET,
+    attack_processed_dir,
+    attack_processed_stage_dir,
+    clean_processed_stage_dir,
+)
+from app.io_utils import iter_jsonl, write_jsonl
 from app.model_profiles import GENERATOR_PROFILES, GeneratorProfile
 
-
-PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
-CLEAN_CLOSE_ENDED_DEV_FINAL_DIR = PROCESSED_DIR / "clean" / "close_ended_dev" / "final"
-ATTACK_OUTPUT_DIR = PROCESSED_DIR / "attacks" / "poisoned_rag" / "close_ended_dev"
-TARGET_ANSWER_DIR = ATTACK_OUTPUT_DIR / "target_answers"
-TARGET_ANSWER_INITIAL_DIR = TARGET_ANSWER_DIR / "initial"
-TARGET_ANSWER_FINAL_DIR = TARGET_ANSWER_DIR / "final"
-GENERATED_PASSAGES_DIR = ATTACK_OUTPUT_DIR / "generated_passages"
-ATTACK_FINAL_DIR = ATTACK_OUTPUT_DIR / "final"
-
-DEFAULT_FINAL_QUERIES_PATH = CLEAN_CLOSE_ENDED_DEV_FINAL_DIR / "queries.jsonl"
-DEFAULT_FINAL_CORPUS_PATH = CLEAN_CLOSE_ENDED_DEV_FINAL_DIR / "corpus.jsonl"
-
-DEFAULT_TARGET_ANSWER_REVIEW_PATH = TARGET_ANSWER_INITIAL_DIR / "target_answer_review.jsonl"
-DEFAULT_TARGET_ANSWER_MANIFEST_PATH = TARGET_ANSWER_INITIAL_DIR / "manifest.json"
-DEFAULT_FINAL_TARGET_ANSWER_QUERIES_PATH = TARGET_ANSWER_FINAL_DIR / "queries.jsonl"
-DEFAULT_FINAL_TARGET_ANSWER_MANIFEST_PATH = TARGET_ANSWER_FINAL_DIR / "manifest.json"
-
-DEFAULT_GENERATED_PASSAGES_PATH = GENERATED_PASSAGES_DIR / "passages.jsonl"
-DEFAULT_GENERATED_PASSAGES_MANIFEST_PATH = GENERATED_PASSAGES_DIR / "manifest.json"
-
-DEFAULT_ATTACK_QUERIES_PATH = ATTACK_FINAL_DIR / "queries.jsonl"
-DEFAULT_ATTACK_CORPUS_PATH = ATTACK_FINAL_DIR / "corpus.jsonl"
-DEFAULT_ATTACK_POISON_DOCS_PATH = ATTACK_FINAL_DIR / "poison_docs.jsonl"
-DEFAULT_ATTACK_SCENARIOS_PATH = ATTACK_FINAL_DIR / "scenarios.jsonl"
-DEFAULT_ATTACK_MANIFEST_PATH = ATTACK_FINAL_DIR / "manifest.json"
-
 ATTACK_TYPE = "poisoned_rag"
+DEFAULT_DATASET = DEFAULT_CLOSE_ENDED_MAIN_DATASET
 
 
-def iter_jsonl(path: Path):
-    """Yield JSON objects from a JSONL file."""
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line:
-                yield json.loads(line)
+def resolve_poisoned_rag_paths(dataset: str) -> dict[str, Path]:
+    """Resolve the processed clean and attack paths for one PoisonedRAG dataset."""
+    clean_final_dir = clean_processed_stage_dir(dataset, "final")
+    attack_output_dir = attack_processed_dir("poisoned_rag", dataset)
+    target_answer_dir = attack_output_dir / "target_answers"
+    target_answer_initial_dir = target_answer_dir / "initial"
+    target_answer_final_dir = target_answer_dir / "final"
+    generated_passages_dir = attack_output_dir / "generated_passages"
+    attack_final_dir = attack_processed_stage_dir("poisoned_rag", dataset, "final")
+
+    return {
+        "final_queries_path": clean_final_dir / "queries.jsonl",
+        "final_corpus_path": clean_final_dir / "corpus.jsonl",
+        "target_answer_review_path": target_answer_initial_dir / "target_answer_review.jsonl",
+        "target_answer_manifest_path": target_answer_initial_dir / "manifest.json",
+        "final_target_answer_queries_path": target_answer_final_dir / "queries.jsonl",
+        "final_target_answer_manifest_path": target_answer_final_dir / "manifest.json",
+        "generated_passages_path": generated_passages_dir / "passages.jsonl",
+        "generated_passages_manifest_path": generated_passages_dir / "manifest.json",
+        "attack_queries_path": attack_final_dir / "queries.jsonl",
+        "attack_corpus_path": attack_final_dir / "corpus.jsonl",
+        "attack_poison_docs_path": attack_final_dir / "poison_docs.jsonl",
+        "attack_scenarios_path": attack_final_dir / "scenarios.jsonl",
+        "attack_manifest_path": attack_final_dir / "manifest.json",
+    }
 
 
-def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
-    """Write JSON objects to a JSONL file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+DEFAULT_PATHS = resolve_poisoned_rag_paths(DEFAULT_DATASET)
+DEFAULT_FINAL_QUERIES_PATH = DEFAULT_PATHS["final_queries_path"]
+DEFAULT_FINAL_CORPUS_PATH = DEFAULT_PATHS["final_corpus_path"]
+DEFAULT_TARGET_ANSWER_REVIEW_PATH = DEFAULT_PATHS["target_answer_review_path"]
+DEFAULT_TARGET_ANSWER_MANIFEST_PATH = DEFAULT_PATHS["target_answer_manifest_path"]
+DEFAULT_FINAL_TARGET_ANSWER_QUERIES_PATH = DEFAULT_PATHS["final_target_answer_queries_path"]
+DEFAULT_FINAL_TARGET_ANSWER_MANIFEST_PATH = DEFAULT_PATHS["final_target_answer_manifest_path"]
+DEFAULT_GENERATED_PASSAGES_PATH = DEFAULT_PATHS["generated_passages_path"]
+DEFAULT_GENERATED_PASSAGES_MANIFEST_PATH = DEFAULT_PATHS["generated_passages_manifest_path"]
+DEFAULT_ATTACK_QUERIES_PATH = DEFAULT_PATHS["attack_queries_path"]
+DEFAULT_ATTACK_CORPUS_PATH = DEFAULT_PATHS["attack_corpus_path"]
+DEFAULT_ATTACK_POISON_DOCS_PATH = DEFAULT_PATHS["attack_poison_docs_path"]
+DEFAULT_ATTACK_SCENARIOS_PATH = DEFAULT_PATHS["attack_scenarios_path"]
+DEFAULT_ATTACK_MANIFEST_PATH = DEFAULT_PATHS["attack_manifest_path"]
 
 
 def unique_support_titles(query_record: dict[str, Any]) -> list[str]:

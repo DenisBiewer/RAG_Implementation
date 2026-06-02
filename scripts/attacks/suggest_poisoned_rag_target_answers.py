@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Suggest one attacker target answer per final close-ended-dev query.
+Suggest one attacker target answer per finalized close-ended query.
 
 Workflow:
 - boolean answers are flipped deterministically
@@ -14,14 +14,28 @@ import argparse
 import json
 from pathlib import Path
 
-from poisoned_rag_common import (
-    DEFAULT_FINAL_QUERIES_PATH,
-    DEFAULT_TARGET_ANSWER_MANIFEST_PATH,
-    DEFAULT_TARGET_ANSWER_REVIEW_PATH,
-    iter_jsonl,
-    resolve_generator_profile,
-    unique_support_titles,
-)
+try:
+    from .poisoned_rag_common import (
+        DEFAULT_DATASET,
+        DEFAULT_FINAL_QUERIES_PATH,
+        DEFAULT_TARGET_ANSWER_MANIFEST_PATH,
+        DEFAULT_TARGET_ANSWER_REVIEW_PATH,
+        iter_jsonl,
+        resolve_poisoned_rag_paths,
+        resolve_generator_profile,
+        unique_support_titles,
+    )
+except ImportError:
+    from poisoned_rag_common import (
+        DEFAULT_DATASET,
+        DEFAULT_FINAL_QUERIES_PATH,
+        DEFAULT_TARGET_ANSWER_MANIFEST_PATH,
+        DEFAULT_TARGET_ANSWER_REVIEW_PATH,
+        iter_jsonl,
+        resolve_poisoned_rag_paths,
+        resolve_generator_profile,
+        unique_support_titles,
+    )
 
 from app.generator import QwenGenerator
 from scripts.analysis.answer_validation import normalize_text
@@ -202,11 +216,12 @@ def suggest_target_answers(
 def parse_args() -> argparse.Namespace:
     """Parse CLI options."""
     parser = argparse.ArgumentParser(
-        description="Suggest reviewable attacker target answers for close-ended-dev queries."
+        description="Suggest reviewable attacker target answers for a finalized close-ended dataset."
     )
-    parser.add_argument("--queries-path", type=Path, default=DEFAULT_FINAL_QUERIES_PATH)
-    parser.add_argument("--output-review-path", type=Path, default=DEFAULT_TARGET_ANSWER_REVIEW_PATH)
-    parser.add_argument("--manifest-path", type=Path, default=DEFAULT_TARGET_ANSWER_MANIFEST_PATH)
+    parser.add_argument("--dataset", default=DEFAULT_DATASET)
+    parser.add_argument("--queries-path", type=Path, default=None)
+    parser.add_argument("--output-review-path", type=Path, default=None)
+    parser.add_argument("--manifest-path", type=Path, default=None)
     parser.add_argument("--suggester-profile", default=DEFAULT_SUGGESTER_PROFILE)
     parser.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS)
     return parser.parse_args()
@@ -215,10 +230,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """CLI entry point."""
     args = parse_args()
+    paths = resolve_poisoned_rag_paths(args.dataset)
     suggest_target_answers(
-        queries_path=args.queries_path,
-        output_review_path=args.output_review_path,
-        manifest_path=args.manifest_path,
+        queries_path=args.queries_path or paths["final_queries_path"],
+        output_review_path=args.output_review_path or paths["target_answer_review_path"],
+        manifest_path=args.manifest_path or paths["target_answer_manifest_path"],
         suggester_profile_name=args.suggester_profile,
         max_new_tokens=args.max_new_tokens,
     )
