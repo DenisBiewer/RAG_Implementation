@@ -14,17 +14,21 @@ from pathlib import Path
 import sys
 
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = next(
-    parent
-    for parent in (BASE_DIR, *BASE_DIR.parents)
-    if (parent / "app").exists() and (parent / "data").exists()
-)
+PROJECT_DIR = Path(__file__).resolve().parents[2]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-DATA_DIR = PROJECT_DIR / "data"
-LOG_DIR = PROJECT_DIR / "logs"
+from app.dataset_registry import (
+    CLOSE_ENDED_DATASET_NAMES,
+    attack_built_dir,
+    attack_logs_dir,
+    clean_experiment_index_paths,
+    clean_logs_stage_dir,
+    clean_processed_stage_dir,
+    exfiltration_control_dataset_name,
+)
+from app.experiment_configs import ALL_CONFIG_NAMES
+from app.path_utils import DATA_DIR, LOG_DIR
 
 
 @dataclass(frozen=True)
@@ -38,69 +42,50 @@ class DatasetProfile:
 
 
 DATASET_PROFILES: dict[str, DatasetProfile] = {
-    "clean_dev": DatasetProfile(
-        queries_path=DATA_DIR / "processed" / "clean" / "dev" / "queries.jsonl",
-        index_path=DATA_DIR / "built" / "clean" / "dev" / "faiss.index",
-        meta_path=DATA_DIR / "built" / "clean" / "dev" / "faiss_meta.json",
-        log_dir=LOG_DIR / "clean" / "dev",
-    ),
-    "close_ended_dev": DatasetProfile(
-        queries_path=DATA_DIR / "processed" / "clean" / "close_ended_dev" / "initial" / "queries.jsonl",
-        index_path=DATA_DIR / "built" / "clean" / "close_ended_dev" / "initial" / "faiss.index",
-        meta_path=DATA_DIR / "built" / "clean" / "close_ended_dev" / "initial" / "faiss_meta.json",
-        log_dir=LOG_DIR / "clean" / "close_ended_dev" / "initial",
-    ),
-    "close_ended_dev_final": DatasetProfile(
-        queries_path=DATA_DIR / "processed" / "clean" / "close_ended_dev" / "final" / "queries.jsonl",
-        index_path=DATA_DIR / "built" / "clean" / "close_ended_dev" / "final" / "faiss.index",
-        meta_path=DATA_DIR / "built" / "clean" / "close_ended_dev" / "final" / "faiss_meta.json",
-        log_dir=LOG_DIR / "clean" / "close_ended_dev" / "final",
-    ),
-    "clean_controlled_dev": DatasetProfile(
-        queries_path=DATA_DIR / "processed" / "clean" / "controlled_dev" / "queries.jsonl",
-        index_path=DATA_DIR / "built" / "clean" / "controlled_dev" / "faiss.index",
-        meta_path=DATA_DIR / "built" / "clean" / "controlled_dev" / "faiss_meta.json",
-        log_dir=LOG_DIR / "clean" / "controlled_dev",
-    ),
     "clean_complete": DatasetProfile(
         queries_path=DATA_DIR / "processed" / "clean" / "complete" / "queries.jsonl",
         index_path=DATA_DIR / "built" / "clean" / "complete" / "faiss.index",
         meta_path=DATA_DIR / "built" / "clean" / "complete" / "faiss_meta.json",
         log_dir=LOG_DIR / "clean" / "complete",
     ),
-    "instruction_following_controlled_dev": DatasetProfile(
-        queries_path=DATA_DIR / "processed" / "clean" / "controlled_dev" / "queries.jsonl",
-        index_path=DATA_DIR / "built" / "attacks" / "instruction_following" / "controlled_dev" / "faiss.index",
-        meta_path=DATA_DIR / "built" / "attacks" / "instruction_following" / "controlled_dev" / "faiss_meta.json",
-        log_dir=LOG_DIR / "attacks" / "instruction_following" / "controlled_dev",
-    ),
-    "exfiltration_controlled_dev": DatasetProfile(
-        queries_path=DATA_DIR / "processed" / "clean" / "controlled_dev" / "queries.jsonl",
-        index_path=DATA_DIR / "built" / "attacks" / "exfiltration" / "controlled_dev" / "faiss.index",
-        meta_path=DATA_DIR / "built" / "attacks" / "exfiltration" / "controlled_dev" / "faiss_meta.json",
-        log_dir=LOG_DIR / "attacks" / "exfiltration" / "controlled_dev",
-    ),
-    "exfiltration_controlled_dev_control": DatasetProfile(
-        queries_path=DATA_DIR / "processed" / "clean" / "controlled_dev" / "queries.jsonl",
-        index_path=DATA_DIR / "built" / "attacks" / "exfiltration" / "controlled_dev_control" / "faiss.index",
-        meta_path=DATA_DIR / "built" / "attacks" / "exfiltration" / "controlled_dev_control" / "faiss_meta.json",
-        log_dir=LOG_DIR / "attacks" / "exfiltration" / "controlled_dev_control",
-    ),
-    "poisoned_rag_close_ended_dev": DatasetProfile(
-        queries_path=DATA_DIR / "processed" / "attacks" / "poisoned_rag" / "close_ended_dev" / "final" / "queries.jsonl",
-        index_path=DATA_DIR / "built" / "attacks" / "poisoned_rag" / "close_ended_dev" / "final" / "faiss.index",
-        meta_path=DATA_DIR / "built" / "attacks" / "poisoned_rag" / "close_ended_dev" / "final" / "faiss_meta.json",
-        log_dir=LOG_DIR / "attacks" / "poisoned_rag" / "close_ended_dev",
-    ),
 }
 
-ALL_CONFIG_NAMES = [
-    "baseline",
-    "retrieval_only",
-    "prompt_only",
-    "output_only",
-]
+for dataset in CLOSE_ENDED_DATASET_NAMES:
+    for stage in ("initial", "final"):
+        index_path, meta_path = clean_experiment_index_paths(dataset, stage)
+        DATASET_PROFILES[f"{dataset}_{stage}"] = DatasetProfile(
+            queries_path=clean_processed_stage_dir(dataset, stage) / "queries.jsonl",
+            index_path=index_path,
+            meta_path=meta_path,
+            log_dir=clean_logs_stage_dir(dataset, stage),
+        )
 
+    DATASET_PROFILES[f"instruction_following_{dataset}"] = DatasetProfile(
+        queries_path=clean_processed_stage_dir(dataset, "final") / "queries.jsonl",
+        index_path=attack_built_dir("instruction_following", dataset) / "faiss.index",
+        meta_path=attack_built_dir("instruction_following", dataset) / "faiss_meta.json",
+        log_dir=attack_logs_dir("instruction_following", dataset),
+    )
+    DATASET_PROFILES[f"exfiltration_{dataset}"] = DatasetProfile(
+        queries_path=clean_processed_stage_dir(dataset, "final") / "queries.jsonl",
+        index_path=attack_built_dir("exfiltration", dataset) / "faiss.index",
+        meta_path=attack_built_dir("exfiltration", dataset) / "faiss_meta.json",
+        log_dir=attack_logs_dir("exfiltration", dataset),
+    )
+
+    control_dataset = exfiltration_control_dataset_name(dataset)
+    DATASET_PROFILES[f"exfiltration_{control_dataset}"] = DatasetProfile(
+        queries_path=clean_processed_stage_dir(dataset, "final") / "queries.jsonl",
+        index_path=attack_built_dir("exfiltration", control_dataset) / "faiss.index",
+        meta_path=attack_built_dir("exfiltration", control_dataset) / "faiss_meta.json",
+        log_dir=attack_logs_dir("exfiltration", control_dataset),
+    )
+    DATASET_PROFILES[f"poisoned_rag_{dataset}"] = DatasetProfile(
+        queries_path=DATA_DIR / "processed" / "attacks" / "poisoned_rag" / dataset / "final" / "queries.jsonl",
+        index_path=attack_built_dir("poisoned_rag", dataset) / "faiss.index",
+        meta_path=attack_built_dir("poisoned_rag", dataset) / "faiss_meta.json",
+        log_dir=attack_logs_dir("poisoned_rag", dataset),
+    )
 
 def resolve_config_names(config_names: list[str]) -> list[str]:
     """Normalize selected config names and validate them before running."""
@@ -142,7 +127,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset-profile",
         choices=sorted(DATASET_PROFILES),
-        default="close_ended_dev",
+        default="close_ended_main_final",
         help="Named dataset preset to run.",
     )
     parser.add_argument(
