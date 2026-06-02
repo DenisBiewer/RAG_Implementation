@@ -14,8 +14,8 @@ Why this file exists:
 - each run should be logged in a consistent, analysis-friendly structure
 
 Current scope:
-- supports the implemented baseline, retrieval-stage, prompt-stage, and output-stage defense pipeline
-- accepts the configuration objects defined in `app.config`
+- supports the implemented baseline, retrieval-stage, prompt-stage, and output-stage filtering pipeline
+- accepts the configuration objects defined in `app.experiment_configs`
 - records support-title coverage diagnostics for each query
 """
 
@@ -25,14 +25,15 @@ from pathlib import Path
 import torch
 from tqdm import tqdm
 
-from app.config import (
-    BASELINE_CONFIG,
-    OUTPUT_ONLY_CONFIG,
-    PROMPT_ONLY_CONFIG,
-    RETRIEVAL_ONLY_CONFIG,
-)
 from app.corpus_loader import load_queries
+from app.dataset_registry import (
+    DEFAULT_CLOSE_ENDED_MAIN_DATASET,
+    clean_experiment_index_paths,
+    clean_logs_stage_dir,
+    clean_processed_stage_dir,
+)
 from app.embedder import ContrieverEmbedder
+from app.experiment_configs import ALL_EXPERIMENT_CONFIGS
 from app.generator import QwenGenerator
 from app.logging_utils import append_jsonl
 from app.model_profiles import GENERATOR_PROFILES
@@ -41,22 +42,21 @@ from app.schemas import RunConfig
 from app.vector_index import FaissIndex
 
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = BASE_DIR.parent
-DATA_DIR = PROJECT_DIR / "data"
-LOG_DIR = PROJECT_DIR / "logs"
+DEFAULT_DATASET_STAGE = "final"
+DEFAULT_QUERIES_PATH = (
+    clean_processed_stage_dir(DEFAULT_CLOSE_ENDED_MAIN_DATASET, DEFAULT_DATASET_STAGE)
+    / "queries.jsonl"
+)
+DEFAULT_INDEX_PATH, DEFAULT_META_PATH = clean_experiment_index_paths(
+    DEFAULT_CLOSE_ENDED_MAIN_DATASET,
+    DEFAULT_DATASET_STAGE,
+)
+DEFAULT_OUTPUT_PATH = (
+    clean_logs_stage_dir(DEFAULT_CLOSE_ENDED_MAIN_DATASET, DEFAULT_DATASET_STAGE)
+    / "experiment_runs.jsonl"
+)
 
-DEFAULT_QUERIES_PATH = DATA_DIR / "processed" / "clean" / "dev" / "queries.jsonl"
-DEFAULT_INDEX_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss.index"
-DEFAULT_META_PATH = DATA_DIR / "built" / "clean" / "dev" / "faiss_meta.json"
-DEFAULT_OUTPUT_PATH = LOG_DIR / "clean" / "dev" / "experiment_runs.jsonl"
-
-AVAILABLE_CONFIGS: dict[str, RunConfig] = {
-    BASELINE_CONFIG.run_name: BASELINE_CONFIG,
-    RETRIEVAL_ONLY_CONFIG.run_name: RETRIEVAL_ONLY_CONFIG,
-    PROMPT_ONLY_CONFIG.run_name: PROMPT_ONLY_CONFIG,
-    OUTPUT_ONLY_CONFIG.run_name: OUTPUT_ONLY_CONFIG,
-}
+AVAILABLE_CONFIGS: dict[str, RunConfig] = dict(ALL_EXPERIMENT_CONFIGS)
 
 
 def resolve_run_configs(config_names: list[str]) -> list[RunConfig]:
@@ -95,7 +95,7 @@ def ensure_supported_config(config: RunConfig) -> None:
         NotImplementedError: If the configuration enables any defense toggle.
 
     Notes:
-        Retrieval-, prompt-, and output-stage defenses are currently supported.
+        Retrieval-, prompt-, and output-stage filtering are currently supported.
     """
     supported_flags = {
         "use_mmr",
@@ -104,8 +104,8 @@ def ensure_supported_config(config: RunConfig) -> None:
         "use_instruction_hierarchy",
         "use_grounding",
         "use_prompt_context_flags",
+        "use_output_filtering",
         "use_sensitive_info_filter",
-        "use_policy_check",
     }
 
     enabled_flags = {

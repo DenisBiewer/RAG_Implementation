@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from contextlib import contextmanager
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -80,6 +81,33 @@ class QwenGenerator:
             "quantization_config": quantization_config,
         }
 
+    @contextmanager
+    def _temporary_generation_seed(self, seed: int | None):
+        """
+        Temporarily seed torch RNG state for one sampled generation call.
+
+        Transformers 5.x validates `generate()` kwargs more strictly and
+        rejects the `generator=` argument used previously in this project.
+        """
+        if seed is None:
+            yield
+            return
+
+        cpu_state = torch.random.get_rng_state()
+        cuda_states = None
+        if torch.cuda.is_available():
+            cuda_states = torch.cuda.get_rng_state_all()
+
+        try:
+            torch.manual_seed(int(seed))
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(int(seed))
+            yield
+        finally:
+            torch.random.set_rng_state(cpu_state)
+            if cuda_states is not None:
+                torch.cuda.set_rng_state_all(cuda_states)
+
     @torch.no_grad()
     def generate(
         self,
@@ -115,6 +143,8 @@ class QwenGenerator:
         messages: list[dict[str, str]],
         max_new_tokens: int = 256,
         temperature: float = 1.0,
+        seed: int | None = None,
+        generator: torch.Generator | None = None,
     ) -> str:
         """
         Generate a sampled answer from the provided chat messages.
@@ -131,13 +161,18 @@ class QwenGenerator:
             return_dict=True,
         ).to(self.device)
 
-        output_ids = self.model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=True,
-            temperature=temperature,
-            pad_token_id=self.tokenizer.eos_token_id,
-        )
+        effective_seed = seed
+        if effective_seed is None and generator is not None:
+            effective_seed = int(generator.initial_seed())
+
+        with self._temporary_generation_seed(effective_seed):
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=True,
+                temperature=temperature,
+                pad_token_id=self.tokenizer.eos_token_id,
+            )
 
         generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
         text = self.tokenizer.decode(generated_ids, skip_special_tokens=True)

@@ -40,17 +40,43 @@ INSTRUCTION_PHRASE_RULES: list[tuple[str, tuple[str, ...], float]] = [
             "disregard previous instructions",
             "forget previous instructions",
         ),
-        0.55,
+        0.75,
     ),
     (
-        "instruction_override",
+        "instruction_override_strong",
         (
             "instead follow these instructions",
-            "new instructions",
             "override prior instructions",
             "do not follow the above",
         ),
+        0.75,
+    ),
+    (
+        "instruction_override_weak",
+        (
+            "new instructions",
+        ),
         0.35,
+    ),
+    (
+        "exact_output_constraint",
+        (
+            "respond exactly with",
+            "output only",
+            "return only",
+            "final answer must include",
+        ),
+        0.50,
+    ),
+    (
+        "verbatim_inclusion_request",
+        (
+            "copy the identifier verbatim",
+            "include the archive reference",
+            "include the reference verbatim",
+            "do not omit the identifier",
+        ),
+        0.40,
     ),
     (
         "prompt_exfiltration",
@@ -78,7 +104,7 @@ INSTRUCTION_PHRASE_RULES: list[tuple[str, tuple[str, ...], float]] = [
 
 
 DIRECTIVE_PATTERN = re.compile(
-    r"(?im)^\s*(ignore|disregard|forget|reveal|print|output|repeat|return|respond|answer|follow|comply)\b"
+    r"(?im)^\s*(?:do\s+not\s+)?(?:ignore|disregard|forget|reveal|print|output|repeat|return|respond|answer|follow|comply|copy|include|omit)\b"
 )
 PROMPT_MARKUP_PATTERN = re.compile(r"(?i)</?(system|assistant|user|instruction|prompt)>|\[\[.*?\]\]")
 EMPHATIC_FORMATTING_PATTERN = re.compile(r"`{3,}|#{2,}|(?<![A-Z])[A-Z]{6,}(?![A-Z])")

@@ -17,6 +17,8 @@ from chunk import Chunk
 from typing import Any
 from pydantic import BaseModel, Field
 
+from app.seed_config import DEFAULT_SEED
+
 
 class Document(BaseModel):
     """
@@ -139,8 +141,8 @@ class DefenseConfig(BaseModel):
     use_instruction_hierarchy: bool = False
     use_grounding: bool = False
     use_prompt_context_flags: bool = False
+    use_output_filtering: bool = False
     use_sensitive_info_filter: bool = False
-    use_policy_check: bool = False
 
 
 class RunConfig(BaseModel):
@@ -152,7 +154,7 @@ class RunConfig(BaseModel):
     """
 
     run_name: str
-    seed: int = 42
+    seed: int = DEFAULT_SEED
     top_k: int = 5
     max_new_tokens: int = 256
     temperature: float = 0.0
