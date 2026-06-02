@@ -7,24 +7,18 @@ import sys
 from datasets import load_dataset
 
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = next(
-    parent
-    for parent in (BASE_DIR, *BASE_DIR.parents)
-    if (parent / "app").exists() and (parent / "data").exists()
-)
+PROJECT_DIR = Path(__file__).resolve().parents[2]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from app.schemas import Document, QueryRecord
 from app.io_utils import write_jsonl
+from app.path_utils import PROCESSED_DIR
+from app.schemas import Document, QueryRecord
 
 """ 
 This script is responsible for loading the HotpotQA and fulltext datasets and 
 storing them in JSONl in the expected data structure.
 """
-
-PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
 
 COMPLETE_OUTPUT_DIR = PROCESSED_DIR / "clean" / "complete"
 CORPUS_OUTPUT_PATH = COMPLETE_OUTPUT_DIR / "corpus.jsonl"
@@ -67,7 +61,7 @@ def build_corpus(dataset) -> list[Document]:
                         attack_type=None,
                     )
 
-    return list(unique_docs.values())
+    return sorted(unique_docs.values(), key=lambda doc: doc.doc_id)
 
 
 def build_hotpot_queries(dataset, split: str = "validation") -> list[QueryRecord]:
@@ -94,7 +88,7 @@ def build_hotpot_queries(dataset, split: str = "validation") -> list[QueryRecord
             )
         )
 
-    return queries
+    return sorted(queries, key=lambda query: query.query_id)
 
 
 def main():

@@ -2,20 +2,15 @@ from pathlib import Path
 import sys
 
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = next(
-    parent
-    for parent in (BASE_DIR, *BASE_DIR.parents)
-    if (parent / "app").exists() and (parent / "data").exists()
-)
+PROJECT_DIR = Path(__file__).resolve().parents[2]
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
 from app.io_utils import read_jsonl
+from app.path_utils import PROCESSED_DIR
 
 """ This script loads and prints corpus records for manual verification """
 
-PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
 COMPLETE_DIR = PROCESSED_DIR / "clean" / "complete"
 
 CORPUS_PATH = COMPLETE_DIR / "corpus.jsonl"

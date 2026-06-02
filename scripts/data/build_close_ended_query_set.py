@@ -1,54 +1,59 @@
 from __future__ import annotations
 
 """
-Build a small clean HotpotQA development subset of close-ended questions.
+Build a clean close-ended HotpotQA dataset from the complete clean corpus.
 
-This script follows the existing dataset-builder conventions in the project:
-- read clean source corpus and queries from `data/processed/clean/complete`
-- conservatively filter queries for close-ended, substring-checkable answers
-- require local corpus support coverage
-- build a small aligned clean corpus with support documents plus distractors
-- write the selected query set, corpus, audit files, and manifest
+Dataset behavior depends on the selected dataset name:
+- reduced datasets such as `close_ended_dev` build a support-plus-distractor corpus
+- full-corpus datasets such as `close_ended_main` copy the full clean corpus
 
-The output is intended as a reusable clean development set for later attack or
-defense experiments. No malicious or poisoned documents are added.
+Both modes apply the same conservative close-ended query filtering and emit
+audit artifacts plus a manifest.
 """
 
 import argparse
 import json
-import random
 import re
+import shutil
 from collections import Counter
 from pathlib import Path
+import sys
 from typing import Any
 
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = next(
-    parent
-    for parent in (BASE_DIR, *BASE_DIR.parents)
-    if (parent / "app").exists() and (parent / "data").exists()
+from app.dataset_registry import (
+    DEFAULT_CLOSE_ENDED_DATASET,
+    clean_processed_stage_dir,
+    get_close_ended_dataset_spec,
 )
-PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
+from app.io_utils import iter_jsonl, write_jsonl
+from app.path_utils import PROCESSED_DIR
+from app.query_utils import unique_support_titles
+from app.seed_config import resolve_seed
+from app.selection_utils import select_seeded_subset, select_seeded_top_k
 
 CLEAN_COMPLETE_DIR = PROCESSED_DIR / "clean" / "complete"
-CLOSE_ENDED_DEV_DIR = PROCESSED_DIR / "clean" / "close_ended_dev"
-INITIAL_OUTPUT_DIR = CLOSE_ENDED_DEV_DIR / "initial"
+DEFAULT_SPEC = get_close_ended_dataset_spec(DEFAULT_CLOSE_ENDED_DATASET)
+DEFAULT_INITIAL_OUTPUT_DIR = clean_processed_stage_dir(DEFAULT_CLOSE_ENDED_DATASET, "initial")
 
 DEFAULT_CORPUS_PATH = CLEAN_COMPLETE_DIR / "corpus.jsonl"
 DEFAULT_QUERIES_PATH = CLEAN_COMPLETE_DIR / "queries.jsonl"
-DEFAULT_OUTPUT_CORPUS_PATH = INITIAL_OUTPUT_DIR / "corpus.jsonl"
-DEFAULT_OUTPUT_QUERIES_PATH = INITIAL_OUTPUT_DIR / "queries.jsonl"
-DEFAULT_ACCEPTED_AUDIT_PATH = INITIAL_OUTPUT_DIR / "accepted_candidates.jsonl"
-DEFAULT_REJECTED_AUDIT_PATH = INITIAL_OUTPUT_DIR / "rejected_candidates.jsonl"
-DEFAULT_MANIFEST_PATH = INITIAL_OUTPUT_DIR / "manifest.json"
+DEFAULT_OUTPUT_CORPUS_PATH = DEFAULT_INITIAL_OUTPUT_DIR / "corpus.jsonl"
+DEFAULT_OUTPUT_QUERIES_PATH = DEFAULT_INITIAL_OUTPUT_DIR / "queries.jsonl"
+DEFAULT_ACCEPTED_AUDIT_PATH = DEFAULT_INITIAL_OUTPUT_DIR / "accepted_candidates.jsonl"
+DEFAULT_REJECTED_AUDIT_PATH = DEFAULT_INITIAL_OUTPUT_DIR / "rejected_candidates.jsonl"
+DEFAULT_MANIFEST_PATH = DEFAULT_INITIAL_OUTPUT_DIR / "manifest.json"
 
-DEFAULT_INITIAL_CANDIDATE_COUNT = 50
-DEFAULT_FINAL_TARGET_COUNT = 10
-DEFAULT_DISTRACTOR_COUNT = 500
-DEFAULT_SEED = 42
+DEFAULT_INITIAL_CANDIDATE_COUNT = DEFAULT_SPEC.initial_candidate_count
+DEFAULT_FINAL_TARGET_COUNT = DEFAULT_SPEC.final_target_count
+DEFAULT_DISTRACTOR_COUNT = DEFAULT_SPEC.distractor_count
 MAX_SHORT_ANSWER_WORDS = 5
 MAX_ALLOWED_COMMAS = 1
+QUERY_SELECTION_NAMESPACE = "build_close_ended_query_set:queries"
+DISTRACTOR_SELECTION_NAMESPACE = "build_close_ended_query_set:distractors"
 
 MONTH_NAMES = (
     "january",
@@ -120,31 +125,6 @@ COMPARISON_MARKERS = (
     " the same ",
     " both ",
 )
-
-
-def iter_jsonl(path: Path):
-    """Yield JSON objects from a JSONL file."""
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line:
-                yield json.loads(line)
-
-
-def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
-    """Write JSON objects to a JSONL file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-def unique_support_titles(query_record: dict[str, Any]) -> list[str]:
-    """Return unique supporting titles while preserving order."""
-    titles = query_record["supporting_facts"]["title"]
-    return list(dict.fromkeys(titles))
-
-
 def normalize_text(text: str) -> str:
     """Lowercase and collapse punctuation/whitespace for substring checks."""
     normalized = re.sub(r"[^a-z0-9]+", " ", text.lower())
@@ -156,13 +136,16 @@ def word_count(text: str) -> int:
     return len([part for part in text.strip().split() if part])
 
 
-def collect_corpus_titles(corpus_path: Path) -> set[str]:
-    """Collect all topic ids available in the source corpus."""
-    return {
-        record["topic_id"]
-        for record in iter_jsonl(corpus_path)
-        if record.get("topic_id")
-    }
+def collect_corpus_metadata(corpus_path: Path) -> tuple[set[str], int]:
+    """Collect all topic ids available in the source corpus plus the record count."""
+    titles: set[str] = set()
+    record_count = 0
+    for record in iter_jsonl(corpus_path):
+        record_count += 1
+        topic_id = record.get("topic_id")
+        if topic_id:
+            titles.add(topic_id)
+    return titles, record_count
 
 
 def collect_docs_by_title(corpus_path: Path, titles: set[str]) -> dict[str, dict[str, Any]]:
@@ -185,33 +168,31 @@ def collect_support_docs_and_distractors(
     support_titles: set[str],
     distractor_count: int,
     seed: int,
-) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], int]:
     """Collect selected support documents and deterministic distractors."""
-    rng = random.Random(seed)
     support_docs: dict[str, dict[str, Any]] = {}
-    distractors: list[dict[str, Any]] = []
-    seen_distractors = 0
 
-    for record in iter_jsonl(corpus_path):
-        topic_id = record.get("topic_id")
-        if topic_id in support_titles:
-            support_docs.setdefault(topic_id, record)
-            continue
+    def distractor_candidates():
+        for record in iter_jsonl(corpus_path):
+            topic_id = record.get("topic_id")
+            if topic_id in support_titles:
+                support_docs.setdefault(topic_id, record)
+                continue
+            yield record
 
-        seen_distractors += 1
-        if len(distractors) < distractor_count:
-            distractors.append(record)
-            continue
-
-        replacement_index = rng.randrange(seen_distractors)
-        if replacement_index < distractor_count:
-            distractors[replacement_index] = record
+    distractors, distractor_candidate_count = select_seeded_top_k(
+        distractor_candidates(),
+        count=distractor_count,
+        seed=seed,
+        id_fn=lambda record: record["doc_id"],
+        namespace=DISTRACTOR_SELECTION_NAMESPACE,
+    )
 
     missing = sorted(support_titles - set(support_docs))
     if missing:
         raise ValueError(f"Missing support docs after corpus scan: {missing}")
 
-    return support_docs, distractors
+    return support_docs, distractors, distractor_candidate_count
 
 
 def is_boolean_answer(answer: str) -> bool:
@@ -316,7 +297,7 @@ def explain_answer_shape(question: str, answer: str) -> tuple[bool, str | None, 
 
 
 def question_is_supported(question: str, answer: str) -> tuple[bool, str | None]:
-    """Return whether the question form is conservative enough for this dev set."""
+    """Return whether the question form is conservative enough for this controlled subset."""
     stripped = question.strip()
     lowered = stripped.lower()
 
@@ -359,7 +340,9 @@ def build_accepted_audit_record(
     query: dict[str, Any],
     detected_answer_type: str,
     support_titles: list[str],
-    answer_found_in_support: bool,
+    support_titles_present_in_corpus: dict[str, bool],
+    answer_found_in_support: bool | None,
+    support_answer_check_status: str,
 ) -> dict[str, Any]:
     """Build one accepted-candidate audit row."""
     return {
@@ -369,7 +352,12 @@ def build_accepted_audit_record(
         "detected_answer_type": detected_answer_type,
         "answer_length_words": word_count(query["answer"]),
         "support_titles_found": support_titles,
+        "support_titles_present_in_corpus": support_titles_present_in_corpus,
+        "all_support_titles_present_in_corpus": bool(support_titles_present_in_corpus) and all(
+            support_titles_present_in_corpus.values()
+        ),
         "answer_found_in_support": answer_found_in_support,
+        "support_answer_check_status": support_answer_check_status,
         "accepted": True,
     }
 
@@ -379,8 +367,10 @@ def classify_candidates(
     queries: list[dict[str, Any]],
     corpus_titles: set[str],
     docs_by_title: dict[str, dict[str, Any]],
+    dataset: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Classify source queries into eligible candidates and rejected candidates."""
+    dataset_spec = get_close_ended_dataset_spec(dataset)
     eligible: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     seen_questions: set[str] = set()
@@ -429,7 +419,28 @@ def classify_candidates(
             )
             continue
 
-        if not support_titles or any(title not in corpus_titles for title in support_titles):
+        if not support_titles:
+            rejected.append(
+                build_rejection_record(
+                    query,
+                    detected_answer_type,
+                    "missing_support_titles",
+                    "The query has no supporting titles.",
+                )
+            )
+            continue
+
+        support_titles_present_in_corpus = {
+            title: title in corpus_titles
+            for title in support_titles
+        }
+        missing_support_titles = [
+            title
+            for title, present in support_titles_present_in_corpus.items()
+            if not present
+        ]
+
+        if dataset_spec.require_support_titles_in_corpus and missing_support_titles:
             rejected.append(
                 build_rejection_record(
                     query,
@@ -440,25 +451,46 @@ def classify_candidates(
             )
             continue
 
-        answer_found_in_support = False
+        answer_found_in_support: bool | None = None
+        support_answer_check_status = "not_applicable_boolean"
         if not is_boolean_answer(answer):
-            normalized_answer = normalize_text(answer)
-            answer_found_in_support = any(
-                normalized_answer
-                and normalized_answer in normalize_text(docs_by_title[title]["text"])
+            available_support_titles = [
+                title
                 for title in support_titles
                 if title in docs_by_title
-            )
-            if not answer_found_in_support:
+            ]
+            if missing_support_titles:
+                support_answer_check_status = "support_titles_missing_in_source_corpus"
+            elif len(available_support_titles) < len(support_titles):
+                support_answer_check_status = "support_docs_missing_for_answer_check"
                 rejected.append(
                     build_rejection_record(
                         query,
                         detected_answer_type,
-                        "answer_not_found_in_support",
-                        "Gold answer does not appear in the available supporting documents.",
+                        "support_not_found_in_corpus",
+                        "One or more supporting titles are missing from the available answer-check document set.",
                     )
                 )
                 continue
+            else:
+                normalized_answer = normalize_text(answer)
+                answer_found_in_support = any(
+                    normalized_answer
+                    and normalized_answer in normalize_text(docs_by_title[title]["text"])
+                    for title in support_titles
+                    if title in docs_by_title
+                )
+                support_answer_check_status = "verified_in_support"
+                if not answer_found_in_support:
+                    rejected.append(
+                        build_rejection_record(
+                            query,
+                            detected_answer_type,
+                            "answer_not_found_in_support",
+                            "Gold answer does not appear in the available supporting documents.",
+                        )
+                    )
+                    continue
 
         eligible.append(
             {
@@ -467,7 +499,9 @@ def classify_candidates(
                     query,
                     detected_answer_type,
                     support_titles,
+                    support_titles_present_in_corpus,
                     answer_found_in_support,
+                    support_answer_check_status,
                 ),
             }
         )
@@ -475,73 +509,33 @@ def classify_candidates(
     return eligible, rejected
 
 
-def select_close_ended_queries(
+def build_output_corpus(
     *,
-    eligible_candidates: list[dict[str, Any]],
-    initial_candidate_count: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Select the first deterministic subset of eligible candidates."""
-    selected = eligible_candidates[:initial_candidate_count]
-    remaining = eligible_candidates[initial_candidate_count:]
-
-    if len(selected) < initial_candidate_count:
-        raise ValueError(
-            "Only found "
-            f"{len(selected)} eligible close-ended queries; requested {initial_candidate_count}."
-        )
-
-    return selected, remaining
-
-
-def build_close_ended_query_set(
-    *,
+    dataset: str,
     corpus_path: Path,
-    queries_path: Path,
     output_corpus_path: Path,
-    output_queries_path: Path,
-    accepted_audit_path: Path,
-    rejected_audit_path: Path,
-    manifest_path: Path,
-    initial_candidate_count: int,
-    final_target_count: int,
+    selected_queries: list[dict[str, Any]],
     distractor_count: int,
     seed: int,
-) -> None:
-    """Build and write the clean close-ended query subset and aligned corpus."""
-    print(f"Loading source queries from {queries_path}...")
-    queries = list(iter_jsonl(queries_path))
-    print(f"Loaded source questions: {len(queries)}")
+) -> tuple[int, int, int, dict[str, Any]]:
+    """Write the clean corpus for one close-ended dataset stage and summarize it."""
+    dataset_spec = get_close_ended_dataset_spec(dataset)
 
-    print(f"Loading corpus title set from {corpus_path}...")
-    corpus_titles = collect_corpus_titles(corpus_path)
-    print(f"Found {len(corpus_titles)} unique corpus titles.")
-
-    provisional_support_titles: set[str] = set()
-    for query in queries:
-        answer_ok, _, _ = explain_answer_shape(query["question"], query["answer"])
-        question_ok, _ = question_is_supported(query["question"], query["answer"])
-        support_titles = unique_support_titles(query)
-        if answer_ok and question_ok and support_titles and all(
-            title in corpus_titles for title in support_titles
-        ):
-            provisional_support_titles.update(support_titles)
-
-    print("Collecting support documents needed for answer-evidence checks...")
-    docs_by_title = collect_docs_by_title(corpus_path, provisional_support_titles)
-
-    print("Classifying close-ended candidates...")
-    eligible_candidates, rejected_candidates = classify_candidates(
-        queries=queries,
-        corpus_titles=corpus_titles,
-        docs_by_title=docs_by_title,
-    )
-
-    selected_candidates, unselected_candidates = select_close_ended_queries(
-        eligible_candidates=eligible_candidates,
-        initial_candidate_count=initial_candidate_count,
-    )
-    selected_queries = [candidate["query"] for candidate in selected_candidates]
-    accepted_audit_records = [candidate["audit"] for candidate in selected_candidates]
+    if dataset_spec.use_full_corpus:
+        output_corpus_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(corpus_path, output_corpus_path)
+        support_title_set = {
+            title
+            for query in selected_queries
+            for title in unique_support_titles(query)
+        }
+        corpus_record_count = sum(1 for _ in iter_jsonl(corpus_path))
+        return len(support_title_set), 0, corpus_record_count, {
+            "method": "full_corpus_copy",
+            "candidate_count": corpus_record_count,
+            "selected_count": corpus_record_count,
+            "selected_doc_ids": [],
+        }
 
     ordered_support_titles: list[str] = []
     for query in selected_queries:
@@ -555,8 +549,8 @@ def build_close_ended_query_set(
         f"{len(support_title_set)} unique support docs."
     )
 
-    print(f"Collecting support docs and {distractor_count} random distractors...")
-    support_docs, distractors = collect_support_docs_and_distractors(
+    print(f"Collecting support docs and {distractor_count} seeded distractors...")
+    support_docs, distractors, distractor_candidate_count = collect_support_docs_and_distractors(
         corpus_path=corpus_path,
         support_titles=support_title_set,
         distractor_count=distractor_count,
@@ -565,11 +559,98 @@ def build_close_ended_query_set(
 
     output_corpus = [support_docs[title] for title in ordered_support_titles]
     output_corpus.extend(distractors)
-
-    write_jsonl(output_queries_path, selected_queries)
     write_jsonl(output_corpus_path, output_corpus)
+    return len(support_title_set), len(distractors), len(output_corpus), {
+        "method": "stable_seeded_hash_rank",
+        "namespace": DISTRACTOR_SELECTION_NAMESPACE,
+        "candidate_count": distractor_candidate_count,
+        "selected_count": len(distractors),
+        "selected_doc_ids": [record["doc_id"] for record in distractors],
+    }
+
+
+def build_close_ended_query_set(
+    *,
+    dataset: str,
+    corpus_path: Path,
+    queries_path: Path,
+    output_corpus_path: Path,
+    output_queries_path: Path,
+    accepted_audit_path: Path,
+    rejected_audit_path: Path,
+    manifest_path: Path,
+    initial_candidate_count: int,
+    final_target_count: int,
+    distractor_count: int,
+    seed: int,
+) -> None:
+    """Build and write the clean close-ended query subset and aligned corpus."""
+    dataset_spec = get_close_ended_dataset_spec(dataset)
+    effective_seed = resolve_seed(seed)
+
+    print(f"Building dataset: {dataset}")
+    print(f"- use_full_corpus: {dataset_spec.use_full_corpus}")
+    print(f"- initial_candidate_count: {initial_candidate_count}")
+    print(f"- final_target_count: {final_target_count}")
+
+    print(f"Loading source queries from {queries_path}...")
+    queries = list(iter_jsonl(queries_path))
+    print(f"Loaded source questions: {len(queries)}")
+
+    print(f"Loading corpus title set from {corpus_path}...")
+    corpus_titles, source_corpus_record_count = collect_corpus_metadata(corpus_path)
+    print(f"Found {len(corpus_titles)} unique corpus titles across {source_corpus_record_count} records.")
+
+    provisional_support_titles: set[str] = set()
+    for query in queries:
+        answer_ok, _, _ = explain_answer_shape(query["question"], query["answer"])
+        question_ok, _ = question_is_supported(query["question"], query["answer"])
+        support_titles = unique_support_titles(query)
+        if answer_ok and question_ok and support_titles:
+            provisional_support_titles.update(
+                title
+                for title in support_titles
+                if title in corpus_titles
+            )
+
+    print("Collecting support documents needed for answer-evidence checks...")
+    docs_by_title = collect_docs_by_title(corpus_path, provisional_support_titles)
+
+    print("Classifying close-ended candidates...")
+    eligible_candidates, rejected_candidates = classify_candidates(
+        queries=queries,
+        corpus_titles=corpus_titles,
+        docs_by_title=docs_by_title,
+        dataset=dataset,
+    )
+
+    selected_candidates, unselected_candidates = select_close_ended_queries(
+        eligible_candidates=eligible_candidates,
+        initial_candidate_count=initial_candidate_count,
+        seed=effective_seed,
+    )
+    selected_queries = [candidate["query"] for candidate in selected_candidates]
+    accepted_audit_records = [candidate["audit"] for candidate in selected_candidates]
+    rejected_candidates = sorted(
+        rejected_candidates,
+        key=lambda record: str(record["query_id"]),
+    )
+
+    output_queries_path.parent.mkdir(parents=True, exist_ok=True)
+    accepted_audit_path.parent.mkdir(parents=True, exist_ok=True)
+    rejected_audit_path.parent.mkdir(parents=True, exist_ok=True)
+    write_jsonl(output_queries_path, selected_queries)
     write_jsonl(accepted_audit_path, accepted_audit_records)
     write_jsonl(rejected_audit_path, rejected_candidates)
+
+    support_doc_count, selected_distractor_count, output_corpus_record_count, distractor_selection = build_output_corpus(
+        dataset=dataset,
+        corpus_path=corpus_path,
+        output_corpus_path=output_corpus_path,
+        selected_queries=selected_queries,
+        distractor_count=distractor_count,
+        seed=effective_seed,
+    )
 
     answer_type_distribution = Counter(
         record["detected_answer_type"] for record in accepted_audit_records
@@ -579,21 +660,36 @@ def build_close_ended_query_set(
     )
 
     manifest = {
-        "dataset_name": "close_ended_dev",
+        "dataset_name": dataset,
         "stage": "initial",
         "script_name": Path(__file__).name,
         "source_dataset": "clean_complete",
+        "use_full_corpus": dataset_spec.use_full_corpus,
+        "support_title_inclusion_required": dataset_spec.require_support_titles_in_corpus,
         "source_question_count": len(queries),
+        "source_corpus_record_count": source_corpus_record_count,
         "eligible_question_count": len(eligible_candidates),
+        "accepted_question_count": len(selected_queries),
         "selected_initial_candidate_count": len(selected_queries),
         "rejected_question_count": len(rejected_candidates),
         "not_selected_question_count": len(unselected_candidates),
         "requested_initial_candidate_count": initial_candidate_count,
         "planned_final_target_count": final_target_count,
-        "random_seed": seed,
-        "distractor_count": len(distractors),
-        "support_doc_count": len(ordered_support_titles),
-        "corpus_record_count": len(output_corpus),
+        "random_seed": effective_seed,
+        "distractor_count": selected_distractor_count,
+        "support_doc_count": support_doc_count,
+        "corpus_record_count": output_corpus_record_count,
+        "query_selection": {
+            "method": "stable_seeded_hash_rank",
+            "namespace": QUERY_SELECTION_NAMESPACE,
+            "candidate_count": len(eligible_candidates),
+            "selected_count": len(selected_queries),
+            "selected_query_ids": [query["query_id"] for query in selected_queries],
+            "not_selected_query_ids": [
+                candidate["query"]["query_id"] for candidate in unselected_candidates
+            ],
+        },
+        "distractor_selection": distractor_selection,
         "answer_type_distribution": dict(sorted(answer_type_distribution.items())),
         "rejection_reason_counts": dict(sorted(rejection_reason_counts.items())),
         "source_corpus_path": str(corpus_path),
@@ -624,24 +720,50 @@ def build_close_ended_query_set(
     print(f"Rejected questions: {len(rejected_candidates)}")
     print(f"Top rejection reasons: {top_rejections}")
     print(f"Saved close-ended queries: {len(selected_queries)} -> {output_queries_path}")
-    print(f"Saved close-ended corpus: {len(output_corpus)} -> {output_corpus_path}")
+    print(f"Saved close-ended corpus -> {output_corpus_path}")
     print(f"Saved accepted audit -> {accepted_audit_path}")
     print(f"Saved rejected audit -> {rejected_audit_path}")
     print(f"Saved manifest -> {manifest_path}")
+
+def select_close_ended_queries(
+    *,
+    eligible_candidates: list[dict[str, Any]],
+    initial_candidate_count: int,
+    seed: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Select a stable seeded subset of eligible candidates."""
+    selected, remaining = select_seeded_subset(
+        eligible_candidates,
+        count=initial_candidate_count,
+        seed=seed,
+        id_fn=lambda candidate: candidate["query"]["query_id"],
+        namespace=QUERY_SELECTION_NAMESPACE,
+    )
+
+    if len(selected) < initial_candidate_count:
+        raise ValueError(
+            "Only found "
+            f"{len(selected)} eligible close-ended queries; requested {initial_candidate_count}."
+        )
+
+    selected = sorted(selected, key=lambda candidate: str(candidate["query"]["query_id"]))
+    remaining = sorted(remaining, key=lambda candidate: str(candidate["query"]["query_id"]))
+    return selected, remaining
 
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI options."""
     parser = argparse.ArgumentParser(
-        description="Build a clean close-ended HotpotQA development subset."
+        description="Build a clean close-ended HotpotQA dataset."
     )
+    parser.add_argument("--dataset", default=DEFAULT_CLOSE_ENDED_DATASET)
     parser.add_argument("--corpus-path", type=Path, default=DEFAULT_CORPUS_PATH)
     parser.add_argument("--queries-path", type=Path, default=DEFAULT_QUERIES_PATH)
-    parser.add_argument("--output-corpus-path", type=Path, default=DEFAULT_OUTPUT_CORPUS_PATH)
-    parser.add_argument("--output-queries-path", type=Path, default=DEFAULT_OUTPUT_QUERIES_PATH)
-    parser.add_argument("--accepted-audit-path", type=Path, default=DEFAULT_ACCEPTED_AUDIT_PATH)
-    parser.add_argument("--rejected-audit-path", type=Path, default=DEFAULT_REJECTED_AUDIT_PATH)
-    parser.add_argument("--manifest-path", type=Path, default=DEFAULT_MANIFEST_PATH)
+    parser.add_argument("--output-corpus-path", type=Path, default=None)
+    parser.add_argument("--output-queries-path", type=Path, default=None)
+    parser.add_argument("--accepted-audit-path", type=Path, default=None)
+    parser.add_argument("--rejected-audit-path", type=Path, default=None)
+    parser.add_argument("--manifest-path", type=Path, default=None)
     parser.add_argument(
         "--initial-candidate-count",
         type=int,
@@ -650,7 +772,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--final-target-count",
         type=int,
-        default=DEFAULT_FINAL_TARGET_COUNT,
+        default=None,
     )
     parser.add_argument(
         "--query-count",
@@ -658,14 +780,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Deprecated alias for --initial-candidate-count.",
     )
-    parser.add_argument("--distractor-count", type=int, default=DEFAULT_DISTRACTOR_COUNT)
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--distractor-count", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=None)
     return parser.parse_args()
 
 
 def main() -> None:
     """CLI entry point."""
     args = parse_args()
+    dataset_spec = get_close_ended_dataset_spec(args.dataset)
+    initial_output_dir = clean_processed_stage_dir(args.dataset, "initial")
     initial_candidate_count = args.initial_candidate_count
     if args.query_count is not None and initial_candidate_count is not None:
         if args.query_count != initial_candidate_count:
@@ -676,19 +800,20 @@ def main() -> None:
     if initial_candidate_count is None:
         initial_candidate_count = args.query_count
     if initial_candidate_count is None:
-        initial_candidate_count = DEFAULT_INITIAL_CANDIDATE_COUNT
+        initial_candidate_count = dataset_spec.initial_candidate_count
     build_close_ended_query_set(
+        dataset=args.dataset,
         corpus_path=args.corpus_path,
         queries_path=args.queries_path,
-        output_corpus_path=args.output_corpus_path,
-        output_queries_path=args.output_queries_path,
-        accepted_audit_path=args.accepted_audit_path,
-        rejected_audit_path=args.rejected_audit_path,
-        manifest_path=args.manifest_path,
+        output_corpus_path=args.output_corpus_path or initial_output_dir / "corpus.jsonl",
+        output_queries_path=args.output_queries_path or initial_output_dir / "queries.jsonl",
+        accepted_audit_path=args.accepted_audit_path or initial_output_dir / "accepted_candidates.jsonl",
+        rejected_audit_path=args.rejected_audit_path or initial_output_dir / "rejected_candidates.jsonl",
+        manifest_path=args.manifest_path or initial_output_dir / "manifest.json",
         initial_candidate_count=initial_candidate_count,
-        final_target_count=args.final_target_count,
-        distractor_count=args.distractor_count,
-        seed=args.seed,
+        final_target_count=args.final_target_count or dataset_spec.final_target_count,
+        distractor_count=args.distractor_count if args.distractor_count is not None else dataset_spec.distractor_count,
+        seed=resolve_seed(args.seed),
     )
 
 

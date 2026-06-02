@@ -7,62 +7,45 @@ Pipeline role:
 - read the initial close-ended query/corpus stage
 - read manual review decisions for script-validated queries
 - require every reviewed query to have an explicit True/False decision
-- if more queries passed manual review than needed, draw a seeded random sample
+- if more queries passed manual review than needed, select them by seeded stable ranking
 - write the final target queries, aligned final corpus, and a manifest
 """
 
 import argparse
 import json
-import random
+import shutil
 from pathlib import Path
+import sys
 from typing import Any
 
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
-BASE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = next(
-    parent
-    for parent in (BASE_DIR, *BASE_DIR.parents)
-    if (parent / "app").exists() and (parent / "data").exists()
+from app.dataset_registry import (
+    DEFAULT_CLOSE_ENDED_DATASET,
+    clean_processed_stage_dir,
+    get_close_ended_dataset_spec,
 )
-PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
+from app.io_utils import iter_jsonl, write_jsonl
+from app.query_utils import unique_support_titles
+from app.seed_config import resolve_seed
+from app.selection_utils import select_seeded_subset
 
-DEFAULT_DATASET = "close_ended_dev"
-CLOSE_ENDED_DEV_DIR = PROCESSED_DIR / "clean" / DEFAULT_DATASET
-INITIAL_STAGE_DIR = CLOSE_ENDED_DEV_DIR / "initial"
-FINAL_STAGE_DIR = CLOSE_ENDED_DEV_DIR / "final"
+DEFAULT_DATASET = DEFAULT_CLOSE_ENDED_DATASET
+DEFAULT_SPEC = get_close_ended_dataset_spec(DEFAULT_DATASET)
+DEFAULT_INITIAL_STAGE_DIR = clean_processed_stage_dir(DEFAULT_DATASET, "initial")
+DEFAULT_FINAL_STAGE_DIR = clean_processed_stage_dir(DEFAULT_DATASET, "final")
 
-DEFAULT_INITIAL_QUERIES_PATH = INITIAL_STAGE_DIR / "queries.jsonl"
-DEFAULT_INITIAL_CORPUS_PATH = INITIAL_STAGE_DIR / "corpus.jsonl"
-DEFAULT_MANUAL_REVIEW_PATH = FINAL_STAGE_DIR / "manual_review.jsonl"
-DEFAULT_FINAL_QUERIES_PATH = FINAL_STAGE_DIR / "queries.jsonl"
-DEFAULT_FINAL_CORPUS_PATH = FINAL_STAGE_DIR / "corpus.jsonl"
-DEFAULT_FINAL_MANIFEST_PATH = FINAL_STAGE_DIR / "manifest.json"
+DEFAULT_INITIAL_QUERIES_PATH = DEFAULT_INITIAL_STAGE_DIR / "queries.jsonl"
+DEFAULT_INITIAL_CORPUS_PATH = DEFAULT_INITIAL_STAGE_DIR / "corpus.jsonl"
+DEFAULT_MANUAL_REVIEW_PATH = DEFAULT_FINAL_STAGE_DIR / "manual_review.jsonl"
+DEFAULT_FINAL_QUERIES_PATH = DEFAULT_FINAL_STAGE_DIR / "queries.jsonl"
+DEFAULT_FINAL_CORPUS_PATH = DEFAULT_FINAL_STAGE_DIR / "corpus.jsonl"
+DEFAULT_FINAL_MANIFEST_PATH = DEFAULT_FINAL_STAGE_DIR / "manifest.json"
 
-DEFAULT_FINAL_TARGET_COUNT = 10
-DEFAULT_SEED = 42
-
-
-def iter_jsonl(path: Path):
-    """Yield JSON objects from a JSONL file."""
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line:
-                yield json.loads(line)
-
-
-def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
-    """Write JSON objects to a JSONL file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-def unique_support_titles(query_record: dict[str, Any]) -> list[str]:
-    """Return unique supporting titles while preserving order."""
-    return list(dict.fromkeys(query_record["supporting_facts"]["title"]))
-
+DEFAULT_FINAL_TARGET_COUNT = DEFAULT_SPEC.final_target_count
+FINAL_SELECTION_NAMESPACE = "finalize_close_ended_query_set:manual_review_final_targets"
 
 def load_manual_review_rows(path: Path) -> list[dict[str, Any]]:
     """Load the manual-review artifact."""
@@ -92,7 +75,7 @@ def select_reviewed_rows(
     final_target_count: int,
     seed: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
-    """Select final reviewed rows, using seeded sampling only when needed."""
+    """Select final reviewed rows, using seeded ranking only when needed."""
     require_completed_manual_review(manual_review_rows)
 
     accepted_rows = [
@@ -109,19 +92,23 @@ def select_reviewed_rows(
     if len(accepted_rows) == final_target_count:
         return accepted_rows, [], False
 
-    rng = random.Random(seed)
-    sampled_rows = rng.sample(accepted_rows, final_target_count)
+    sampled_rows, not_selected_rows = select_seeded_subset(
+        accepted_rows,
+        count=final_target_count,
+        seed=seed,
+        id_fn=lambda row: row["query_id"],
+        namespace=FINAL_SELECTION_NAMESPACE,
+    )
     selected_ids = {row["query_id"] for row in sampled_rows}
     selected_rows = [
         row
         for row in manual_review_rows
         if row["query_id"] in selected_ids
     ]
-    not_selected_rows = [
-        row
-        for row in accepted_rows
-        if row["query_id"] not in selected_ids
-    ]
+    not_selected_rows = sorted(
+        not_selected_rows,
+        key=lambda row: str(row["query_id"]),
+    )
     return selected_rows, not_selected_rows, True
 
 
@@ -205,48 +192,59 @@ def finalize_close_ended_query_set(
     seed: int,
 ) -> None:
     """Finalize the reviewed target-query set and aligned final corpus."""
+    dataset_spec = get_close_ended_dataset_spec(dataset)
+    effective_seed = resolve_seed(seed)
     initial_queries = list(iter_jsonl(initial_queries_path))
-    initial_corpus = list(iter_jsonl(initial_corpus_path))
     manual_review_rows = load_manual_review_rows(manual_review_path)
 
     selected_review_rows, not_selected_rows, used_random_sample = select_reviewed_rows(
         manual_review_rows=manual_review_rows,
         final_target_count=final_target_count,
-        seed=seed,
+        seed=effective_seed,
     )
     final_queries = build_final_queries(
         initial_queries=initial_queries,
         selected_review_rows=selected_review_rows,
     )
-    final_corpus = build_final_corpus(
-        initial_corpus=initial_corpus,
-        initial_queries=initial_queries,
-        final_queries=final_queries,
-    )
 
     write_jsonl(final_queries_path, final_queries)
-    write_jsonl(final_corpus_path, final_corpus)
+
+    if dataset_spec.use_full_corpus:
+        final_corpus_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(initial_corpus_path, final_corpus_path)
+        final_corpus_record_count = sum(1 for _ in iter_jsonl(final_corpus_path))
+        distractor_count = 0
+    else:
+        initial_corpus = list(iter_jsonl(initial_corpus_path))
+        final_corpus = build_final_corpus(
+            initial_corpus=initial_corpus,
+            initial_queries=initial_queries,
+            final_queries=final_queries,
+        )
+        write_jsonl(final_corpus_path, final_corpus)
+        initial_support_titles = {
+            title
+            for query in initial_queries
+            for title in unique_support_titles(query)
+        }
+        distractor_count = sum(
+            1
+            for record in final_corpus
+            if record.get("topic_id") not in initial_support_titles
+        )
+        final_corpus_record_count = len(final_corpus)
 
     final_support_titles = {
         title
         for query in final_queries
         for title in unique_support_titles(query)
     }
-    initial_support_titles = {
-        title
-        for query in initial_queries
-        for title in unique_support_titles(query)
-    }
-    distractor_count = sum(
-        1
-        for record in final_corpus
-        if record.get("topic_id") not in initial_support_titles
-    )
 
     manifest = {
         "dataset_name": dataset,
         "stage": "final",
         "script_name": Path(__file__).name,
+        "use_full_corpus": dataset_spec.use_full_corpus,
         "initial_queries_path": str(initial_queries_path),
         "initial_corpus_path": str(initial_corpus_path),
         "manual_review_path": str(manual_review_path),
@@ -259,10 +257,26 @@ def finalize_close_ended_query_set(
         ),
         "selected_final_query_count": len(final_queries),
         "used_random_sample": used_random_sample,
-        "random_seed": seed,
+        "random_seed": effective_seed,
+        "final_selection": {
+            "method": (
+                "stable_seeded_hash_rank"
+                if used_random_sample
+                else "all_manually_approved_rows_selected"
+            ),
+            "namespace": FINAL_SELECTION_NAMESPACE if used_random_sample else None,
+            "candidate_count": sum(
+                row["manual_validation_pass"] is True for row in manual_review_rows
+            ),
+            "selected_count": len(final_queries),
+            "selected_query_ids": [query["query_id"] for query in final_queries],
+            "not_selected_query_ids": [
+                row["query_id"] for row in not_selected_rows
+            ],
+        },
         "support_doc_count": len(final_support_titles),
         "distractor_count": distractor_count,
-        "final_corpus_record_count": len(final_corpus),
+        "final_corpus_record_count": final_corpus_record_count,
         "selected_query_ids": [query["query_id"] for query in final_queries],
         "manual_pass_not_selected_query_ids": [
             row["query_id"] for row in not_selected_rows
@@ -284,8 +298,9 @@ def finalize_close_ended_query_set(
         encoding="utf-8",
     )
 
+    initial_corpus_record_count = sum(1 for _ in iter_jsonl(initial_corpus_path))
     print(f"Loaded initial queries: {len(initial_queries)}")
-    print(f"Loaded initial corpus docs: {len(initial_corpus)}")
+    print(f"Loaded initial corpus docs: {initial_corpus_record_count}")
     print(f"Loaded manual review rows: {len(manual_review_rows)}")
     print(f"Selected final target queries: {len(final_queries)}")
     print(f"Used random sample: {used_random_sample}")
@@ -303,55 +318,58 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--initial-queries-path",
         type=Path,
-        default=DEFAULT_INITIAL_QUERIES_PATH,
+        default=None,
     )
     parser.add_argument(
         "--initial-corpus-path",
         type=Path,
-        default=DEFAULT_INITIAL_CORPUS_PATH,
+        default=None,
     )
     parser.add_argument(
         "--manual-review-path",
         type=Path,
-        default=DEFAULT_MANUAL_REVIEW_PATH,
+        default=None,
     )
     parser.add_argument(
         "--final-queries-path",
         type=Path,
-        default=DEFAULT_FINAL_QUERIES_PATH,
+        default=None,
     )
     parser.add_argument(
         "--final-corpus-path",
         type=Path,
-        default=DEFAULT_FINAL_CORPUS_PATH,
+        default=None,
     )
     parser.add_argument(
         "--final-manifest-path",
         type=Path,
-        default=DEFAULT_FINAL_MANIFEST_PATH,
+        default=None,
     )
     parser.add_argument(
         "--final-target-count",
         type=int,
-        default=DEFAULT_FINAL_TARGET_COUNT,
+        default=None,
     )
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--seed", type=int, default=None)
     return parser.parse_args()
 
 
 def main() -> None:
     """CLI entry point."""
     args = parse_args()
+    dataset_spec = get_close_ended_dataset_spec(args.dataset)
+    initial_stage_dir = clean_processed_stage_dir(args.dataset, "initial")
+    final_stage_dir = clean_processed_stage_dir(args.dataset, "final")
     finalize_close_ended_query_set(
         dataset=args.dataset,
-        initial_queries_path=args.initial_queries_path,
-        initial_corpus_path=args.initial_corpus_path,
-        manual_review_path=args.manual_review_path,
-        final_queries_path=args.final_queries_path,
-        final_corpus_path=args.final_corpus_path,
-        final_manifest_path=args.final_manifest_path,
-        final_target_count=args.final_target_count,
-        seed=args.seed,
+        initial_queries_path=args.initial_queries_path or initial_stage_dir / "queries.jsonl",
+        initial_corpus_path=args.initial_corpus_path or initial_stage_dir / "corpus.jsonl",
+        manual_review_path=args.manual_review_path or final_stage_dir / "manual_review.jsonl",
+        final_queries_path=args.final_queries_path or final_stage_dir / "queries.jsonl",
+        final_corpus_path=args.final_corpus_path or final_stage_dir / "corpus.jsonl",
+        final_manifest_path=args.final_manifest_path or final_stage_dir / "manifest.json",
+        final_target_count=args.final_target_count or dataset_spec.final_target_count,
+        seed=resolve_seed(args.seed),
     )
 
 
