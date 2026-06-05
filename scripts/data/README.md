@@ -24,14 +24,20 @@ The intended flow is:
 Use `close_ended_main` when you want the canonical thesis workflow:
 
 - full clean corpus
+- 200 initial selected close-ended candidates before validation/export
 - 20 final reviewed target queries
 - clean experiment runs reuse the `clean_complete` retrieval artifacts
 
 Use `close_ended_dev` when you want a smaller iteration dataset:
 
 - reduced clean corpus
+- 50 initial selected close-ended candidates before validation/export
 - 10 final reviewed target queries
+- 500 seeded distractor documents in the clean corpus
 - clean experiment runs use dataset-stage-specific retrieval artifacts
+
+Indexing details for the clean and attack corpora are documented in
+[../indexing/README.md](../indexing/README.md).
 
 ## Methodology Notes
 

@@ -50,6 +50,10 @@ If you have a current exfiltration control run and want those metrics included:
 .\.venv\Scripts\python.exe scripts/analysis/analyze_exfiltration_attack.py --dataset close_ended_main_control
 ```
 
+The exfiltration analyzer defaults to the control-style dataset name when
+`--dataset` is omitted, so pass `--dataset close_ended_main` explicitly when
+you want the attack corpus rather than the matched control corpus.
+
 ## Per-analyzer Outputs
 
 Each main analyzer writes:
@@ -78,6 +82,14 @@ Output locations:
 - `summary.json`
 - `manifest.json`
 - `README.md`
+
+Optional targeted inspection helper:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/analysis/evaluate_instruction_attack_logs.py `
+  --dataset close_ended_main `
+  --output-path results/attacks/instruction_following/close_ended_main/baseline_detailed.json
+```
 
 ## Metric Definitions and Denominators
 

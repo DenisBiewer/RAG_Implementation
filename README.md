@@ -27,7 +27,9 @@ primary experiment outputs are JSONL logs in `logs/`, analyzer summaries in
 If you need the intended workflow from raw HotpotQA through finalized
 close-ended datasets and then into the attack-specific pipelines, start with
 [scripts/README.md](scripts/README.md) and
-[scripts/data/README.md](scripts/data/README.md).
+[scripts/data/README.md](scripts/data/README.md). Retrieval-artifact build
+details and append-only attack-index compatibility rules are documented in
+[scripts/indexing/README.md](scripts/indexing/README.md).
 
 ## Repo Layout
 
@@ -132,6 +134,7 @@ Use the canonical final dataset and follow the high-level chain below:
 1. prepare the clean dataset through the full workflow in
    [scripts/data/README.md](scripts/data/README.md)
 2. build or verify the compatible retrieval artifacts for the selected stage
+   from [scripts/indexing/README.md](scripts/indexing/README.md)
 3. run the clean final experiments from
    [scripts/run/README.md](scripts/run/README.md)
 4. build the attack-specific corpora from `scripts/attacks/`

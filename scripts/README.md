@@ -89,6 +89,9 @@ reproducibility notes live in [run/README.md](run/README.md).
 Analysis usage, generated outputs, metric definitions, and thesis-table
 generation live in [analysis/README.md](analysis/README.md).
 
+Retrieval-artifact presets, clean-vs-attack build behavior, and append-only
+compatibility rules live in [indexing/README.md](indexing/README.md).
+
 ## Typical Navigation
 
 If you are preparing data:

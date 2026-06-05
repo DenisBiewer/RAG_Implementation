@@ -112,8 +112,10 @@ python scripts/run/run_experiments.py --dataset-profile close_ended_main_final -
 ### Common flags
 
 - `--dataset-profile`: named dataset preset
-- `--config`: experiment config name; repeat the flag or use `all`
-- `--profile`: generator profile from `app/model_profiles.py`
+- `--config`: experiment config name; repeat the flag or use `all`. If omitted,
+  the launcher runs `baseline`.
+- `--profile`: generator profile from `app/model_profiles.py`. If omitted, the
+  launcher uses `dev`.
 - `--limit`: optional query cap for smoke tests only; do not use it for final thesis runs
 - `--keep-existing-logs`: preserve existing per-config log files instead of replacing them
 
@@ -268,10 +270,6 @@ These are written under the preset's log directory, for example:
 - `logs/attacks/exfiltration/close_ended_main/`
 - `logs/attacks/poisoned_rag/close_ended_main/`
 
-The runner also passes a combined path to the shared pipeline:
-
-- `combined_runs.jsonl`
-
 ## Single-query Sanity Check
 
 For a quick baseline debug pass:
@@ -280,5 +278,7 @@ For a quick baseline debug pass:
 python scripts/run/run_single_query.py
 ```
 
-That script accepts the same named dataset presets as the batch runner, but it
-remains a debug helper rather than the canonical thesis workflow.
+That script accepts the same named dataset presets as the batch runner and uses
+the first query from the selected preset. It appends one baseline record to the
+selected preset's `baseline_runs.jsonl`, so it remains a debug helper rather
+than the canonical thesis workflow.
