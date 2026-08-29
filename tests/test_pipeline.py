@@ -104,9 +104,35 @@ class FakeGenerator:
     def __init__(self, output_text: str):
         self.output_text = output_text
         self.tokenizer = FakeTokenizer()
+        self.generate_calls: list[dict] = []
+        self.generate_sampled_calls: list[dict] = []
 
     def generate(self, messages, max_new_tokens=256):
-        del messages, max_new_tokens
+        self.generate_calls.append(
+            {
+                "messages": messages,
+                "max_new_tokens": max_new_tokens,
+            }
+        )
+        return self.output_text
+
+    def generate_sampled(
+        self,
+        messages,
+        max_new_tokens=256,
+        temperature=1.0,
+        seed=None,
+        generator=None,
+    ):
+        del generator
+        self.generate_sampled_calls.append(
+            {
+                "messages": messages,
+                "max_new_tokens": max_new_tokens,
+                "temperature": temperature,
+                "seed": seed,
+            }
+        )
         return self.output_text
 
 
@@ -224,6 +250,54 @@ class TestRunQueryLogging(unittest.TestCase):
             "use_prompt_context_flags",
             "use_output_filtering",
         ])
+
+    def test_run_query_uses_sampled_generation_when_temperature_positive(self):
+        embedder = MagicMock()
+        embedder.encode.return_value = np.array([[1.0, 0.0]], dtype=np.float32)
+
+        index = MagicMock()
+        index.search.return_value = (
+            np.array([0.99], dtype=np.float32),
+            np.array([0], dtype=np.int64),
+        )
+        index.row_to_chunk = {
+            0: {
+                "chunk_id": "c0",
+                "doc_id": "doc::0",
+                "text": "Ada Lovelace wrote notes about computation.",
+                "is_malicious": False,
+                "attack_type": None,
+                "document_type": "wiki_chunk",
+                "topic_id": "Ada Lovelace",
+            },
+        }
+
+        generator = FakeGenerator("Ada Lovelace")
+        query_record = QueryRecord(
+            query_id="q_temp",
+            question="Who wrote notes about computation?",
+            answer="Ada Lovelace",
+            supporting_facts=SupportingFacts(),
+        )
+        config = RunConfig(
+            run_name="baseline",
+            temperature=0.7,
+            seed=42,
+        )
+
+        record = run_query(
+            query_record=query_record,
+            embedder=embedder,
+            index=index,
+            generator=generator,
+            config=config,
+        )
+
+        self.assertEqual(record["final_output"], "Ada Lovelace")
+        self.assertEqual(len(generator.generate_calls), 0)
+        self.assertEqual(len(generator.generate_sampled_calls), 1)
+        self.assertEqual(generator.generate_sampled_calls[0]["temperature"], 0.7)
+        self.assertEqual(generator.generate_sampled_calls[0]["seed"], 42)
 
 
 if __name__ == "__main__":

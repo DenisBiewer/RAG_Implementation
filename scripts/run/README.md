@@ -75,7 +75,7 @@ rule-based protected-value output filter implemented in `app/output_filters.py`.
 | Retrieval top-k | `5` | `app/experiment_configs.py` | Shared by all canonical configs unless code/config changes |
 | Retrieval oversampling | `top_k * 4` candidate pool before MMR | `app/retrieval.py` | Applies when retrieval-stage reranking is enabled |
 | Project seed | `42` by default | `app/seed_config.py` | Resolution order: explicit CLI seed, `RAG_SEED`, then default |
-| Deterministic answer generation | `do_sample=False` | `app/generator.py` | Repeated clean/attack answer-generation runs are engineering checks, not independent stochastic trials |
+| Deterministic answer generation | `do_sample=False` | `app/generator.py` | Standard clean/attack runs use greedy decoding unless `--temperature` is passed to the batch runner |
 | PoisonedRAG sampled passage generation | `do_sample=True`, `temperature=1.0` | `scripts/attacks/generate_poisoned_rag_passages.py` | Only the passage-generation stage is intentionally stochastic |
 | PoisonedRAG derived sub-seeds | `derive_seed(effective_seed, query_id, passage_slot_index, slot_attempt_index)` | `app/seed_config.py`, `scripts/attacks/generate_poisoned_rag_passages.py` | This keeps passage attempts reproducible across runs with the same seed |
 | Quantization | `main` and `validation` profiles use `4bit`; `dev` uses `none` | `app/model_profiles.py` | Quantized loading requires `bitsandbytes` and `accelerate` |
@@ -89,6 +89,12 @@ Basic shape:
 
 ```powershell
 python scripts/run/run_experiments.py --dataset-profile <preset> --config <config> --profile <profile>
+```
+
+Temperature-enabled variant:
+
+```powershell
+python scripts/run/run_experiments.py --dataset-profile <preset> --config <config> --profile <profile> --temperature 0.7
 ```
 
 Repeat `--config` to run multiple configurations:
@@ -118,6 +124,9 @@ python scripts/run/run_experiments.py --dataset-profile close_ended_main_final -
   launcher uses `dev`.
 - `--limit`: optional query cap for smoke tests only; do not use it for final thesis runs
 - `--keep-existing-logs`: preserve existing per-config log files instead of replacing them
+- `--temperature`: optional sampled-generation temperature override. Positive
+  values switch generation to the sampled path for all selected configs and
+  write logs to a nested variant directory such as `temperature_0_7/`.
 
 By default the runner clears the selected per-config log files before starting.
 Use `--keep-existing-logs` carefully because it changes log replacement
@@ -180,6 +189,16 @@ python scripts/run/run_experiments.py `
   --profile main
 ```
 
+Temperature-enabled clean run on the finalized close-ended set:
+
+```powershell
+python scripts/run/run_experiments.py `
+  --dataset-profile close_ended_main_final `
+  --config all `
+  --profile main `
+  --temperature 0.7
+```
+
 Instruction-following attack:
 
 ```powershell
@@ -237,12 +256,26 @@ Clean runs:
 .\.venv\Scripts\python.exe scripts/analysis/analyze_clean_dataset.py --dataset close_ended_main --config all
 ```
 
+Temperature-enabled clean runs:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/analysis/analyze_clean_dataset.py --dataset close_ended_main --config all --temperature 0.7
+```
+
 Attack runs:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/analysis/analyze_instruction_following_attack.py --dataset close_ended_main
 .\.venv\Scripts\python.exe scripts/analysis/analyze_exfiltration_attack.py --dataset close_ended_main
 .\.venv\Scripts\python.exe scripts/analysis/analyze_poisoned_rag_attack.py --dataset close_ended_main
+```
+
+Temperature-enabled attack runs:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/analysis/analyze_instruction_following_attack.py --dataset close_ended_main --temperature 0.7
+.\.venv\Scripts\python.exe scripts/analysis/analyze_exfiltration_attack.py --dataset close_ended_main --temperature 0.7
+.\.venv\Scripts\python.exe scripts/analysis/analyze_poisoned_rag_attack.py --dataset close_ended_main --temperature 0.7
 ```
 
 Combined thesis bundle:
@@ -269,6 +302,14 @@ These are written under the preset's log directory, for example:
 - `logs/attacks/instruction_following/close_ended_main/`
 - `logs/attacks/exfiltration/close_ended_main/`
 - `logs/attacks/poisoned_rag/close_ended_main/`
+
+When `--temperature` is set to a positive value, the same per-config filenames
+are written under a nested variant directory, for example:
+
+- `logs/clean/close_ended_main/final/temperature_0_7/`
+- `logs/attacks/instruction_following/close_ended_main/temperature_0_7/`
+- `logs/attacks/exfiltration/close_ended_main/temperature_0_7/`
+- `logs/attacks/poisoned_rag/close_ended_main/temperature_0_7/`
 
 ## Single-query Sanity Check
 

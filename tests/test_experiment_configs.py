@@ -26,6 +26,14 @@ class TestExperimentConfigs(unittest.TestCase):
             ["retrieval_filtering_only", "prompt_context_flags_only"],
         )
 
+    def test_resolve_run_configs_applies_temperature_override_without_renaming(self):
+        resolved = resolve_run_configs(["baseline"], temperature=0.7)
+
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0].run_name, "baseline")
+        self.assertEqual(resolved[0].temperature, 0.7)
+        self.assertEqual(AVAILABLE_CONFIGS["baseline"].temperature, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

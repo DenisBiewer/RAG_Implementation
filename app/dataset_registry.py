@@ -45,6 +45,25 @@ CLOSE_ENDED_DATASET_NAMES = tuple(sorted(CLOSE_ENDED_DATASET_SPECS))
 CLEAN_COMPLETE_DATASET = "complete"
 
 
+def format_temperature_variant(temperature: float | None) -> str | None:
+    """Return the canonical directory label for one sampled-generation temperature."""
+    if temperature is None:
+        return None
+
+    normalized = float(temperature)
+    if normalized <= 0.0:
+        return None
+
+    return f"temperature_{normalized:g}".replace(".", "_")
+
+
+def append_variant_dir(base_dir: Path, variant: str | None = None) -> Path:
+    """Append an optional experiment-variant subdirectory to one base path."""
+    if not variant:
+        return base_dir
+    return base_dir / variant
+
+
 def get_close_ended_dataset_spec(dataset: str) -> CloseEndedDatasetSpec:
     """Resolve one registered close-ended dataset."""
     spec = CLOSE_ENDED_DATASET_SPECS.get(dataset)
@@ -69,14 +88,19 @@ def clean_built_stage_dir(dataset: str, stage: str) -> Path:
     return BUILT_DIR / "clean" / dataset / stage
 
 
-def clean_logs_stage_dir(dataset: str, stage: str) -> Path:
+def clean_logs_stage_dir(dataset: str, stage: str, variant: str | None = None) -> Path:
     """Return the clean experiment log directory for one dataset stage."""
-    return LOG_DIR / "clean" / dataset / stage
+    return append_variant_dir(LOG_DIR / "clean" / dataset / stage, variant)
 
 
-def validation_results_dir(dataset: str) -> Path:
+def validation_results_dir(
+    dataset: str,
+    *,
+    variant: str | None = None,
+    base_dir: Path = RESULTS_DIR,
+) -> Path:
     """Return the clean-validation results directory for one dataset."""
-    return RESULTS_DIR / "validation" / dataset
+    return append_variant_dir(base_dir / "validation" / dataset, variant)
 
 
 def attack_processed_dir(attack_name: str, dataset: str) -> Path:
@@ -99,14 +123,20 @@ def attack_built_stage_dir(attack_name: str, dataset: str, stage: str) -> Path:
     return attack_built_dir(attack_name, dataset) / stage
 
 
-def attack_logs_dir(attack_name: str, dataset: str) -> Path:
+def attack_logs_dir(attack_name: str, dataset: str, variant: str | None = None) -> Path:
     """Return the attack experiment log directory."""
-    return LOG_DIR / "attacks" / attack_name / dataset
+    return append_variant_dir(LOG_DIR / "attacks" / attack_name / dataset, variant)
 
 
-def attack_results_dir(attack_name: str, dataset: str) -> Path:
+def attack_results_dir(
+    attack_name: str,
+    dataset: str,
+    *,
+    variant: str | None = None,
+    base_dir: Path = RESULTS_DIR,
+) -> Path:
     """Return the attack-analysis results directory."""
-    return RESULTS_DIR / "attacks" / attack_name / dataset
+    return append_variant_dir(base_dir / "attacks" / attack_name / dataset, variant)
 
 
 def exfiltration_control_dataset_name(dataset: str) -> str:

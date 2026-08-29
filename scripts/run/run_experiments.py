@@ -9,7 +9,7 @@ shared experiment runner.
 """
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import sys
 
@@ -26,6 +26,7 @@ from app.dataset_registry import (
     clean_logs_stage_dir,
     clean_processed_stage_dir,
     exfiltration_control_dataset_name,
+    format_temperature_variant,
 )
 from app.experiment_configs import ALL_CONFIG_NAMES
 from app.path_utils import DATA_DIR, LOG_DIR
@@ -108,6 +109,13 @@ def build_output_paths(config_names: list[str], dataset: DatasetProfile) -> dict
     }
 
 
+def apply_log_variant(dataset: DatasetProfile, *, variant: str | None = None) -> DatasetProfile:
+    """Return one dataset profile with an optional log-directory variant applied."""
+    if not variant:
+        return dataset
+    return replace(dataset, log_dir=dataset.log_dir / variant)
+
+
 def maybe_clear_outputs(output_paths: dict[str, Path], *, overwrite_existing_logs: bool) -> None:
     """Delete selected output files before a run when explicitly requested."""
     if not overwrite_existing_logs:
@@ -161,6 +169,16 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Keep existing per-config output files instead of deleting them first.",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help=(
+            "Optional sampled-generation temperature override. "
+            "Positive values enable sampled generation and route logs to a "
+            "temperature-specific subdirectory."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -169,7 +187,8 @@ def main() -> None:
     args = parse_args()
     from app.experiment_runner import run_experiments
 
-    dataset = DATASET_PROFILES[args.dataset_profile]
+    variant = format_temperature_variant(args.temperature)
+    dataset = apply_log_variant(DATASET_PROFILES[args.dataset_profile], variant=variant)
     config_names = resolve_config_names(args.config_names or ["baseline"])
     output_paths = build_output_paths(config_names, dataset)
     dataset.log_dir.mkdir(parents=True, exist_ok=True)
@@ -179,6 +198,7 @@ def main() -> None:
     print(f"- dataset: {args.dataset_profile}")
     print(f"- configs: {config_names}")
     print(f"- generator profile: {args.profile}")
+    print(f"- temperature: {args.temperature}")
     print(f"- limit: {args.limit}")
     print(f"- log directory: {dataset.log_dir}")
 
@@ -191,6 +211,7 @@ def main() -> None:
         config_names=config_names,
         profile_name=args.profile,
         limit=args.limit,
+        temperature=args.temperature,
     )
 
 

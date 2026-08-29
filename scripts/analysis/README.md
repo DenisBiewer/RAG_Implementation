@@ -38,6 +38,15 @@ Per-analysis outputs for `close_ended_main`:
 .\.venv\Scripts\python.exe scripts/analysis/analyze_poisoned_rag_attack.py --dataset close_ended_main
 ```
 
+Temperature-enabled variants use the same commands with a matching temperature:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/analysis/analyze_clean_dataset.py --dataset close_ended_main --config all --temperature 0.7
+.\.venv\Scripts\python.exe scripts/analysis/analyze_instruction_following_attack.py --dataset close_ended_main --temperature 0.7
+.\.venv\Scripts\python.exe scripts/analysis/analyze_exfiltration_attack.py --dataset close_ended_main --temperature 0.7
+.\.venv\Scripts\python.exe scripts/analysis/analyze_poisoned_rag_attack.py --dataset close_ended_main --temperature 0.7
+```
+
 Combined thesis bundle:
 
 ```powershell
@@ -70,6 +79,15 @@ Output locations:
 - instruction-following: `results/attacks/instruction_following/<dataset>/`
 - exfiltration: `results/attacks/exfiltration/<dataset>/`
 - PoisonedRAG: `results/attacks/poisoned_rag/<dataset>/`
+
+When `--temperature` is set to a positive value, each analyzer reads from the
+matching temperature-specific log subdirectory and writes to a matching results
+subdirectory, for example:
+
+- clean: `results/validation/<dataset>/temperature_0_7/`
+- instruction-following: `results/attacks/instruction_following/<dataset>/temperature_0_7/`
+- exfiltration: `results/attacks/exfiltration/<dataset>/temperature_0_7/`
+- PoisonedRAG: `results/attacks/poisoned_rag/<dataset>/temperature_0_7/`
 
 ## Thesis Bundle Outputs
 
@@ -140,7 +158,7 @@ current source schema is assembled in `app/pipeline.py` and enriched in
 | `query` | Natural-language question | All analyzers, manual review | Copied from the processed query set |
 | `seed` | Effective seed stored in the run config | Reproducibility checks | Usually `42` unless overridden |
 | `config_name` | Short config label | All analyzers | Example: `baseline`, `retrieval_only` |
-| `run_config` | Serialized canonical run configuration | Auditing, reproducibility | Includes `top_k`, seed, and defense flags |
+| `run_config` | Serialized canonical run configuration | Auditing, reproducibility | Includes `top_k`, seed, defense flags, and the effective generation `temperature` |
 | `generator_profile` | Serialized generator profile metadata | Auditing, reproducibility | Includes profile name, model name, device, quantization |
 | `retrieved_chunks` | Retrieved chunk list with metadata and scores | All analyzers | Each chunk includes `doc_id`, `chunk_id`, `topic_id`, `rank`, `score`, `is_malicious`, `attack_type` |
 | `prompt` | Final chat prompt as message objects | Inspection, manual review | Current field name is `prompt`; there is no separate `prompt_parts` field |

@@ -31,6 +31,7 @@ from app.dataset_registry import (
     clean_experiment_index_paths,
     clean_logs_stage_dir,
     clean_processed_stage_dir,
+    format_temperature_variant,
 )
 from app.embedder import ContrieverEmbedder
 from app.experiment_configs import ALL_EXPERIMENT_CONFIGS
@@ -59,12 +60,18 @@ DEFAULT_OUTPUT_PATH = (
 AVAILABLE_CONFIGS: dict[str, RunConfig] = dict(ALL_EXPERIMENT_CONFIGS)
 
 
-def resolve_run_configs(config_names: list[str]) -> list[RunConfig]:
+def resolve_run_configs(
+    config_names: list[str],
+    *,
+    temperature: float | None = None,
+) -> list[RunConfig]:
     """
     Resolve CLI-provided configuration names into `RunConfig` objects.
 
     Args:
         config_names: Names of experiment configurations requested by the user.
+        temperature: Optional sampled-generation temperature override applied to
+            every resolved config. `None` preserves the canonical config value.
 
     Returns:
         A list of resolved `RunConfig` objects in the same order as requested.
@@ -79,7 +86,13 @@ def resolve_run_configs(config_names: list[str]) -> list[RunConfig]:
         if config is None:
             valid = ", ".join(sorted(AVAILABLE_CONFIGS))
             raise ValueError(f"Unknown config '{name}'. Expected one of: {valid}.")
-        resolved.append(config)
+        resolved.append(config.model_copy(deep=True))
+
+    if temperature is not None:
+        resolved = [
+            config.model_copy(update={"temperature": float(temperature)})
+            for config in resolved
+        ]
 
     return resolved
 
@@ -164,6 +177,7 @@ def run_experiments(
     profile_name: str,
     limit: int | None = None,
     output_paths_by_config: dict[str, Path] | None = None,
+    temperature: float | None = None,
 ) -> None:
     """
     Execute a batch of RAG runs with one-time component initialization.
@@ -188,6 +202,9 @@ def run_experiments(
         output_paths_by_config: Optional mapping from config name to JSONL
             output path. This allows multiple configs to run with one model load
             while still writing separate log files.
+        temperature: Optional sampled-generation temperature override applied to
+            every resolved config. `None` preserves each config's canonical
+            generation behavior.
 
     Raises:
         ValueError: If the generator profile is unknown or no queries are
@@ -204,7 +221,7 @@ def run_experiments(
         valid = ", ".join(sorted(GENERATOR_PROFILES))
         raise ValueError(f"Unknown generator profile '{profile_name}'. Expected one of: {valid}.")
 
-    run_configs = resolve_run_configs(config_names)
+    run_configs = resolve_run_configs(config_names, temperature=temperature)
     for config in run_configs:
         ensure_supported_config(config)
 
@@ -344,6 +361,15 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional maximum number of queries to run.",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help=(
+            "Optional sampled-generation temperature override. "
+            "Positive values enable sampled generation for all selected configs."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -356,14 +382,19 @@ def main() -> None:
     """
     args = parse_args()
     config_names = args.config_names or ["baseline"]
+    output_path = args.output_path
+    variant = format_temperature_variant(args.temperature)
+    if variant and output_path == DEFAULT_OUTPUT_PATH:
+        output_path = clean_logs_stage_dir(DEFAULT_CLOSE_ENDED_MAIN_DATASET, DEFAULT_DATASET_STAGE, variant) / "experiment_runs.jsonl"
     run_experiments(
         queries_path=args.queries_path,
         index_path=args.index_path,
         meta_path=args.meta_path,
-        output_path=args.output_path,
+        output_path=output_path,
         config_names=config_names,
         profile_name=args.profile,
         limit=args.limit,
+        temperature=args.temperature,
     )
 
 

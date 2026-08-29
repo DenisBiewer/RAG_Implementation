@@ -46,6 +46,8 @@ from app.dataset_registry import (
     DEFAULT_CLOSE_ENDED_MAIN_DATASET,
     clean_logs_stage_dir,
     clean_processed_stage_dir,
+    format_temperature_variant,
+    validation_results_dir,
 )
 from app.analysis_utils import (
     add_latency_overhead_vs_baseline,
@@ -490,6 +492,7 @@ def analyze_clean_dataset(
     logs_dir: Path,
     queries_path: Path,
     results_dir: Path,
+    variant: str | None = None,
 ) -> None:
     """Analyze selected clean validation logs."""
     config_names = resolve_config_names(config_names)
@@ -532,7 +535,7 @@ def analyze_clean_dataset(
 
     add_latency_overhead_vs_baseline(summary_by_config)
 
-    output_dir = results_dir / "validation" / dataset
+    output_dir = validation_results_dir(dataset, variant=variant, base_dir=results_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     analysis_manual_review_path = output_dir / "manual_review.jsonl"
     config_summary_path = output_dir / "config_summary.csv"
@@ -709,6 +712,16 @@ def parse_args() -> argparse.Namespace:
         default=RESULTS_DIR,
         help="Base directory for analysis outputs.",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help=(
+            "Optional sampled-generation temperature used for the analyzed logs. "
+            "Positive values select the matching temperature-specific log and "
+            "results subdirectories."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -717,12 +730,14 @@ def main() -> None:
     args = parse_args()
     config_names = args.config_names or list(DEFAULT_CONFIGS)
     final_stage_dir = clean_processed_stage_dir(args.dataset, "final")
+    variant = format_temperature_variant(args.temperature)
     analyze_clean_dataset(
         dataset=args.dataset,
         config_names=config_names,
-        logs_dir=args.logs_dir or clean_logs_stage_dir(args.dataset, "final"),
+        logs_dir=args.logs_dir or clean_logs_stage_dir(args.dataset, "final", variant),
         queries_path=args.queries_path or final_stage_dir / "queries.jsonl",
         results_dir=args.results_dir,
+        variant=variant,
     )
 
 

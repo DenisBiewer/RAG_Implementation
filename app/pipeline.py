@@ -285,10 +285,18 @@ def run_query(
     prompt_tokens = _count_prompt_tokens(generator, messages)
 
     t = timer.start("generation")
-    output = generator.generate(
-        messages,
-        max_new_tokens=config.max_new_tokens,
-    )
+    if config.temperature > 0.0:
+        output = generator.generate_sampled(
+            messages,
+            max_new_tokens=config.max_new_tokens,
+            temperature=config.temperature,
+            seed=config.seed,
+        )
+    else:
+        output = generator.generate(
+            messages,
+            max_new_tokens=config.max_new_tokens,
+        )
     timer.stop("generation", t)
     output_tokens = _count_text_tokens(generator, output)
 

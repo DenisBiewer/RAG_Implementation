@@ -11,7 +11,8 @@ from scripts.analysis.analyze_clean_dataset import (
     answer_matches,
 )
 from scripts.indexing.indexing_presets import INDEXING_PRESETS
-from scripts.run.run_experiments import DATASET_PROFILES
+from scripts.run.run_experiments import DATASET_PROFILES, apply_log_variant
+from app.dataset_registry import format_temperature_variant
 
 
 def write_jsonl(path: Path, records: list[dict]) -> None:
@@ -265,6 +266,69 @@ class TestCleanBaselineValidationAnalyzer(unittest.TestCase):
         self.assertIn("close_ended_dev_final", DATASET_PROFILES)
         self.assertIn("close_ended_main_initial", DATASET_PROFILES)
         self.assertIn("close_ended_main_final", DATASET_PROFILES)
+
+    def test_temperature_variant_paths_use_nested_subdirectories(self):
+        variant = format_temperature_variant(0.7)
+        profile = apply_log_variant(DATASET_PROFILES["close_ended_main_final"], variant=variant)
+
+        self.assertEqual(variant, "temperature_0_7")
+        self.assertTrue(str(profile.log_dir).endswith("close_ended_main\\final\\temperature_0_7"))
+
+    def test_analyze_clean_dataset_writes_temperature_variant_results_separately(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            queries_path = root / "queries.jsonl"
+            logs_dir = root / "logs" / "temperature_0_7"
+            results_dir = root / "results"
+            variant = "temperature_0_7"
+
+            source_queries = [
+                {
+                    "query_id": "q1",
+                    "question": "Who wrote notes about computation?",
+                    "answer": "Ada Lovelace",
+                    "supporting_facts": {"title": ["Ada Lovelace"], "sent_id": [0]},
+                }
+            ]
+            write_jsonl(queries_path, source_queries)
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            write_jsonl(
+                logs_dir / "baseline_runs.jsonl",
+                [
+                    {
+                        "query_id": "q1",
+                        "query": source_queries[0]["question"],
+                        "expected_answer": "Ada Lovelace",
+                        "config_name": "baseline",
+                        "supporting_facts": source_queries[0]["supporting_facts"],
+                        "retrieved_chunks": [],
+                        "model_output": "Ada Lovelace",
+                        "final_output": "Ada Lovelace",
+                        "support_coverage": {
+                            "titles_in_corpus": {"Ada Lovelace": True},
+                            "titles_retrieved": {"Ada Lovelace": True},
+                        },
+                        "defense_decisions": {"defenses_enabled": []},
+                        "latencies_ms": {"generation": 1000.0},
+                    }
+                ],
+            )
+
+            analyze_clean_dataset(
+                dataset="close_ended_dev",
+                config_names=["baseline"],
+                logs_dir=logs_dir,
+                queries_path=queries_path,
+                results_dir=results_dir,
+                variant=variant,
+            )
+
+            self.assertTrue(
+                (results_dir / "validation" / "close_ended_dev" / variant / "summary.json").exists()
+            )
+            self.assertFalse(
+                (results_dir / "validation" / "close_ended_dev" / "summary.json").exists()
+            )
 
 
 if __name__ == "__main__":

@@ -40,7 +40,9 @@ from app.dataset_registry import (
     DEFAULT_CLOSE_ENDED_MAIN_DATASET,
     attack_logs_dir,
     attack_processed_dir,
+    attack_results_dir,
     exfiltration_control_dataset_name,
+    format_temperature_variant,
 )
 from app.analysis_utils import (
     add_latency_overhead_vs_baseline,
@@ -474,6 +476,7 @@ def analyze_exfiltration(
     logs_dir: Path,
     scenarios_path: Path,
     results_dir: Path,
+    variant: str | None = None,
 ) -> None:
     """Analyze all selected exfiltration config logs for one dataset."""
     scenarios = load_scenarios(scenarios_path)
@@ -495,7 +498,7 @@ def analyze_exfiltration(
 
     add_latency_overhead_vs_baseline(summary_by_config)
 
-    output_dir = results_dir / "attacks" / ATTACK_NAME / dataset
+    output_dir = attack_results_dir(ATTACK_NAME, dataset, variant=variant, base_dir=results_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     config_summary_path = output_dir / "config_summary.csv"
@@ -643,6 +646,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--logs-dir", type=Path, default=None)
     parser.add_argument("--scenarios-path", type=Path, default=None)
     parser.add_argument("--results-dir", type=Path, default=RESULTS_DIR)
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help=(
+            "Optional sampled-generation temperature used for the analyzed logs. "
+            "Positive values select the matching temperature-specific log and "
+            "results subdirectories."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -650,7 +663,8 @@ def main() -> None:
     """CLI entry point."""
     args = parse_args()
     config_names = args.config_names or DEFAULT_CONFIGS
-    logs_dir = args.logs_dir or attack_logs_dir(ATTACK_NAME, args.dataset)
+    variant = format_temperature_variant(args.temperature)
+    logs_dir = args.logs_dir or attack_logs_dir(ATTACK_NAME, args.dataset, variant)
     scenarios_path = (
         args.scenarios_path
         or attack_processed_dir(ATTACK_NAME, args.dataset) / "scenarios.jsonl"
@@ -662,6 +676,7 @@ def main() -> None:
         logs_dir=logs_dir,
         scenarios_path=scenarios_path,
         results_dir=args.results_dir,
+        variant=variant,
     )
 
 

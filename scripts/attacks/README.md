@@ -60,11 +60,19 @@ Use the batch runner for experiments:
 python scripts/run/run_experiments.py --dataset-profile <preset> --config all --profile main
 ```
 
+For a temperature-enabled variant of the same experiment family:
+
+```powershell
+python scripts/run/run_experiments.py --dataset-profile <preset> --config all --profile main --temperature 0.7
+```
+
 Runner flags and dataset-profile details are documented in
 [../run/README.md](../run/README.md).
 
 Analysis commands, result schemas, and the cross-attack thesis builder are
-documented in [../analysis/README.md](../analysis/README.md).
+documented in [../analysis/README.md](../analysis/README.md). Temperature-enabled
+runs keep the same per-config filenames but move them into nested variant
+subdirectories such as `temperature_0_7/` under both `logs/` and `results/`.
 
 ## Retrieval-Artifact Compatibility Settings
 

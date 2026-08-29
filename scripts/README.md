@@ -15,6 +15,7 @@ Use the scripts from their grouped locations directly, for example:
 - `python scripts/data/validate_close_ended_query_set.py`
 - `python scripts/indexing/build_retrieval_artifacts.py --preset instruction_following_close_ended_main`
 - `python scripts/run/run_experiments.py --dataset-profile close_ended_main_final --config baseline --profile main`
+- `python scripts/run/run_experiments.py --dataset-profile close_ended_main_final --config baseline --profile main --temperature 0.7`
 
 Unless noted otherwise, `python ...` examples in this directory assume the repo
 virtualenv is already activated. If it is not activated, use
@@ -84,7 +85,9 @@ Attack-specific runbooks live under [attacks/README.md](attacks/README.md):
 - [Exfiltration](attacks/exfiltration.md)
 
 Experiment-runner usage, dataset presets, canonical config names, and
-reproducibility notes live in [run/README.md](run/README.md).
+reproducibility notes live in [run/README.md](run/README.md). That includes the
+optional `--temperature` variant, which writes logs and analysis outputs to
+temperature-specific nested subdirectories such as `temperature_0_7/`.
 
 Analysis usage, generated outputs, metric definitions, and thesis-table
 generation live in [analysis/README.md](analysis/README.md).
