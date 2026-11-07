@@ -93,7 +93,7 @@ def build_hotpot_queries(dataset, split: str = "validation") -> list[QueryRecord
 
 def main():
     print("Loading HotpotQA, fullwiki dataset...")
-    dataset = load_dataset("hotpot_qa", "fullwiki")
+    dataset = load_dataset("hotpotqa/hotpot_qa", "fullwiki")
 
     print("Building corpus...")
     corpus = build_corpus(dataset)
