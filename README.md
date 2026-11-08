@@ -238,3 +238,11 @@ Token-count fields are also logged per run:
 ## Script Overview
 
 The broader script layout is documented in [scripts/README.md](scripts/README.md).
+
+## Attribution and References
+
+This project uses the [HotpotQA dataset](https://hotpotqa.github.io/) (Yang et al., 2018), distributed under the [Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license. The original dataset was processed to construct the retrieval corpus and evaluation query sets used in this research. Redistributed HotpotQA-derived dataset material remains subject to the applicable CC BY-SA 4.0 requirements.
+
+**HotpotQA reference:** Yang et al. (2018). [*HotpotQA: A Dataset for Diverse, Explainable Multi-hop Question Answering*](https://aclanthology.org/D18-1259/). Proceedings of EMNLP 2018.
+
+Academic references for the other datasets, models, and methods used in this project are provided in the accompanying bachelor thesis, which is also available in this repository.
