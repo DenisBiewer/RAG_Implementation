@@ -196,6 +196,34 @@ Interpretation:
 Finalization requires an explicit `true` or `false` decision for every review
 row. Leaving rows undecided will stop the finalization step.
 
+If fewer than 20 queries pass manual review for `close_ended_main`, increase
+the initial candidate pool beyond the default 200 so that more queries go
+through automatic validation. For example:
+
+```powershell
+python scripts/data/build_close_ended_query_set.py --dataset close_ended_main --initial-candidate-count 400
+```
+
+The `--initial-candidate-count` option is defined in
+[`build_close_ended_query_set.py`](build_close_ended_query_set.py); the dataset
+defaults (`initial_candidate_count=200`, `final_target_count=20`) are in the
+`close_ended_main` entry of
+[`app/dataset_registry.py`](../../app/dataset_registry.py). No code edit is needed.
+
+Before rebuilding, save copies of any artifacts and logs you want to retain:
+these commands reuse the same output paths, and the experiment runner replaces
+the baseline log by default. After increasing the pool, repeat steps 3 and 4
+with `--dataset-profile close_ended_main_initial` and `--dataset close_ended_main`,
+respectively, then complete manual review for every exported row. Existing
+decisions are preserved for matching query IDs; newly added rows need decisions.
+The complete clean retrieval index can be reused. A larger pool does not
+guarantee 20 approvals; keep the same review criteria and record the candidate
+count and seed used. Finalization still selects 20 queries if enough pass.
+
+This is a way to construct a new reviewed dataset. It does not guarantee the
+same query IDs or results as the thesis runs. To evaluate the original thesis
+benchmark, use the archived finalized query set rather than selecting it again.
+
 ## 6. Finalize the Reviewed Close-Ended Dataset
 
 Once manual review is complete, finalize the clean close-ended dataset:
